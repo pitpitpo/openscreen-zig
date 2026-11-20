@@ -88,6 +88,7 @@ fn linkOpenScreenLibs(
         mod.linkFramework("CoreAudio", .{});
         mod.linkFramework("ApplicationServices", .{});
         mod.linkFramework("Foundation", .{});
+        mod.linkFramework("AppKit", .{});
         mod.addCSourceFiles(.{
             .root = b.path("src/capture/shims"),
             .files = &.{"macos_sck.m"},

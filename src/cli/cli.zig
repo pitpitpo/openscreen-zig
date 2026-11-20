@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const core = @import("core");
 const project = core.project;
 const commands = core.commands;
@@ -12,6 +13,21 @@ extern "c" fn fseek(stream: *std.c.FILE, offset: c_long, whence: c_int) c_int;
 extern "c" fn ftell(stream: *std.c.FILE) c_long;
 extern "c" fn fflush(stream: *std.c.FILE) c_int;
 
+fn sysWrite(fd: c_int, bytes: []const u8) isize {
+    if (builtin.os.tag == .windows) {
+        const c_win = struct {
+            extern "c" fn _write(f: c_int, buf: [*]const u8, count: c_uint) c_int;
+        };
+        const rc = c_win._write(fd, bytes.ptr, @intCast(bytes.len));
+        return @intCast(rc);
+    } else {
+        const c_posix = struct {
+            extern "c" fn write(f: c_int, buf: [*]const u8, count: usize) isize;
+        };
+        return c_posix.write(fd, bytes.ptr, bytes.len);
+    }
+}
+
 pub var stdout_writer_override: ?*const fn (bytes: []const u8) void = null;
 pub var stderr_writer_override: ?*const fn (bytes: []const u8) void = null;
 
@@ -23,7 +39,7 @@ pub fn writeStdout(bytes: []const u8) void {
     }
     var written: usize = 0;
     while (written < bytes.len) {
-        const rc = std.c.write(1, bytes.ptr + written, bytes.len - written);
+        const rc = sysWrite(1, bytes[written..]);
         if (rc <= 0) break;
         written += @intCast(rc);
     }
@@ -44,7 +60,7 @@ pub fn writeStderr(bytes: []const u8) void {
     }
     var written: usize = 0;
     while (written < bytes.len) {
-        const rc = std.c.write(2, bytes.ptr + written, bytes.len - written);
+        const rc = sysWrite(2, bytes[written..]);
         if (rc <= 0) break;
         written += @intCast(rc);
     }

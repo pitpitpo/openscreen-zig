@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const core = @import("core");
 const project = core.project;
 const commands = core.commands;
@@ -10,6 +11,36 @@ const ffi = @import("ffi");
 extern "c" fn fseek(stream: *std.c.FILE, offset: c_long, whence: c_int) c_int;
 extern "c" fn ftell(stream: *std.c.FILE) c_long;
 
+fn sysWrite(fd: c_int, bytes: []const u8) isize {
+    if (builtin.os.tag == .windows) {
+        const c_win = struct {
+            extern "c" fn _write(f: c_int, buf: [*]const u8, count: c_uint) c_int;
+        };
+        const rc = c_win._write(fd, bytes.ptr, @intCast(bytes.len));
+        return @intCast(rc);
+    } else {
+        const c_posix = struct {
+            extern "c" fn write(f: c_int, buf: [*]const u8, count: usize) isize;
+        };
+        return c_posix.write(fd, bytes.ptr, bytes.len);
+    }
+}
+
+fn sysRead(fd: c_int, buf: []u8) isize {
+    if (builtin.os.tag == .windows) {
+        const c_win = struct {
+            extern "c" fn _read(f: c_int, b: [*]u8, count: c_uint) c_int;
+        };
+        const rc = c_win._read(fd, buf.ptr, @intCast(buf.len));
+        return @intCast(rc);
+    } else {
+        const c_posix = struct {
+            extern "c" fn read(f: c_int, b: [*]u8, count: usize) isize;
+        };
+        return c_posix.read(fd, buf.ptr, buf.len);
+    }
+}
+
 pub var stdout_writer_override: ?*const fn (bytes: []const u8) void = null;
 
 pub fn writeStdout(bytes: []const u8) void {
@@ -20,7 +51,7 @@ pub fn writeStdout(bytes: []const u8) void {
     }
     var written: usize = 0;
     while (written < bytes.len) {
-        const rc = std.c.write(1, bytes.ptr + written, bytes.len - written);
+        const rc = sysWrite(1, bytes[written..]);
         if (rc <= 0) break;
         written += @intCast(rc);
     }
@@ -77,7 +108,7 @@ pub const McpServer = struct {
 
         var read_chunk: [1024]u8 = undefined;
         while (true) {
-            const rc = std.c.read(0, &read_chunk, read_chunk.len);
+            const rc = sysRead(0, &read_chunk);
             if (rc <= 0) break;
             const n: usize = @intCast(rc);
 

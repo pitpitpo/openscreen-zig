@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <pthread.h>

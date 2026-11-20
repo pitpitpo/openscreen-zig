@@ -217,9 +217,10 @@ static DWORD WINAPI WinCaptureThread(LPVOID lpParam) {
 
             int cur_shape = OSC_CURSOR_DEFAULT;
             if (getenv("OPENSCREEN_TEST_HEADLESS") == NULL) {
-                CURSORINFO ci = { sizeof(ci) };
+                CURSORINFO ci;
+                ZeroMemory(&ci, sizeof(ci));
+                ci.cbSize = sizeof(ci);
                 if (GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING)) {
-                    static HCURSOR hArrow = LoadCursor(NULL, IDC_ARROW);
                     static HCURSOR hIBeam = LoadCursor(NULL, IDC_IBEAM);
                     static HCURSOR hHand = LoadCursor(NULL, IDC_HAND);
                     static HCURSOR hCross = LoadCursor(NULL, IDC_CROSS);
