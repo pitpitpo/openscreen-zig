@@ -28,7 +28,7 @@ fn linkWgpu(
             mod.linkFramework("IOKit", .{});
             mod.linkFramework("IOSurface", .{});
         } else if (target_os == .windows) {
-            mod.addObjectFile(dep.path("lib/wgpu_native.lib"));
+            mod.linkSystemLibrary("wgpu_native", .{});
             mod.linkSystemLibrary("d3d12", .{});
             mod.linkSystemLibrary("dxgi", .{});
             mod.linkSystemLibrary("user32", .{});
