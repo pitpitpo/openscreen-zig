@@ -49,13 +49,12 @@ jobs:
         run: |
           mkdir -p tests/fixtures/models tests/fixtures/onnx
           if [ ! -f tests/fixtures/models/ggml-tiny.en.bin ]; then
-            curl -sL https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin -o tests/fixtures/models/ggml-tiny.en.bin
+            curl -sL "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin" -o tests/fixtures/models/ggml-tiny.en.bin
           fi
           if [ ! -f tests/fixtures/onnx/libonnxruntime.so ]; then
-            curl -sL https://github.com/microsoft/onnxruntime/releases/download/v1.18.1/onnxruntime-linux-x64-1.18.1.tgz -o onnxruntime.tgz
-            tar -xzf onnxruntime.tgz
-            ONNX_DIR=$(find . -maxdepth 1 -type d -name "onnxruntime-linux-*" | head -n 1)
-            cp "$ONNX_DIR/lib/libonnxruntime.so."* tests/fixtures/onnx/libonnxruntime.so 2>/dev/null || cp "$ONNX_DIR/lib/libonnxruntime.so" tests/fixtures/onnx/libonnxruntime.so || true
+            curl -sL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.27.1/microsoft.ml.onnxruntime.1.27.1.nupkg" -o /tmp/ort.zip
+            unzip -q -o /tmp/ort.zip "runtimes/linux-x64/native/libonnxruntime.so" -d /tmp/ort
+            cp /tmp/ort/runtimes/linux-x64/native/libonnxruntime.so tests/fixtures/onnx/libonnxruntime.so
           fi
 
       - name: Build openscreen binary (ReleaseSafe)
@@ -113,10 +112,9 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path "tests/fixtures/models"
           Invoke-WebRequest -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin" -OutFile "tests/fixtures/models/ggml-tiny.en.bin"
-          Invoke-WebRequest -Uri "https://github.com/microsoft/onnxruntime/releases/download/v1.18.1/onnxruntime-win-x64-1.18.1.zip" -OutFile "onnxruntime.zip"
-          Expand-Archive -Path "onnxruntime.zip" -DestinationPath "onnx_extracted"
-          $onnxDir = Get-ChildItem -Path "onnx_extracted" -Directory | Select-Object -First 1
-          Copy-Item "$($onnxDir.FullName)\lib\onnxruntime.dll" -Destination "."
+          Invoke-WebRequest -Uri "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.27.1/microsoft.ml.onnxruntime.1.27.1.nupkg" -OutFile "ort.zip"
+          Expand-Archive -Path "ort.zip" -DestinationPath "ort_extracted"
+          Copy-Item "ort_extracted\runtimes\win-x64\native\onnxruntime.dll" -Destination "."
 
       - name: Build openscreen binary
         run: zig build -Doptimize=ReleaseSafe
@@ -158,11 +156,10 @@ jobs:
       - name: Setup Test Fixtures (Whisper & ONNX Runtime macOS)
         run: |
           mkdir -p tests/fixtures/models tests/fixtures/onnx
-          curl -sL https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin -o tests/fixtures/models/ggml-tiny.en.bin
-          curl -sL https://github.com/microsoft/onnxruntime/releases/download/v1.18.1/onnxruntime-osx-universal2-1.18.1.tgz -o onnxruntime.tgz
-          tar -xzf onnxruntime.tgz
-          ONNX_DIR=$(find . -maxdepth 1 -type d -name "onnxruntime-osx-*" | head -n 1)
-          cp "$ONNX_DIR/lib/libonnxruntime."*.dylib tests/fixtures/onnx/libonnxruntime.dylib 2>/dev/null || cp "$ONNX_DIR/lib/libonnxruntime.dylib" tests/fixtures/onnx/libonnxruntime.dylib || true
+          curl -sL "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin" -o tests/fixtures/models/ggml-tiny.en.bin
+          curl -sL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.27.1/microsoft.ml.onnxruntime.1.27.1.nupkg" -o /tmp/ort.zip
+          unzip -q -o /tmp/ort.zip "runtimes/osx-*/native/libonnxruntime.dylib" -d /tmp/ort
+          cp /tmp/ort/runtimes/osx-*/native/libonnxruntime.dylib tests/fixtures/onnx/libonnxruntime.dylib 2>/dev/null || true
 
       - name: Build openscreen binary
         run: zig build -Doptimize=ReleaseSafe
