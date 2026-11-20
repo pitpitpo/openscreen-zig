@@ -1,5 +1,7 @@
 .reference/
+.zig-cache
 .zig-cache/
+zig-cache
 zig-cache/
 zig-out/
 *.o
