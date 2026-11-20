@@ -142,9 +142,6 @@ test "Gate 3: 10-second multi-track project render to MP4 and GIF" {
 
     // 3. Render 10s MP4 (H.264 + AAC)
     const mp4_path = if (builtin.os.tag == .windows) "gate3_render_10s.mp4" else "/tmp/gate3_render_10s.mp4";
-    defer if (builtin.os.tag == .windows) {
-        std.fs.cwd().deleteFile(mp4_path) catch {};
-    };
     try media.encoder.MediaEncoder.encodeMp4(
         mp4_path,
         .{
@@ -166,9 +163,6 @@ test "Gate 3: 10-second multi-track project render to MP4 and GIF" {
 
     // 4. Render 2s GIF (60 frames at 30 fps)
     const gif_path = if (builtin.os.tag == .windows) "gate3_render.gif" else "/tmp/gate3_render.gif";
-    defer if (builtin.os.tag == .windows) {
-        std.fs.cwd().deleteFile(gif_path) catch {};
-    };
     try media.encoder.MediaEncoder.encodeGif(
         gif_path,
         width,
