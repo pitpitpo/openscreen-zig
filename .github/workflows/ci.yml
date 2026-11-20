@@ -34,8 +34,11 @@ jobs:
             libfreetype-dev \
             libharfbuzz-dev \
             libx11-dev \
+            libxext-dev \
             libxfixes-dev \
-            libpipewire-0.3-dev
+            libxi-dev \
+            libpipewire-0.3-dev \
+            libdbus-1-dev
 
       - name: Setup Zig 0.17.1
         uses: mlugg/setup-zig@v2
@@ -83,6 +86,17 @@ jobs:
           A_DUR=$(ffprobe -v error -select_streams a:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 /tmp/gate3_render_10s.mp4)
           echo "Audio duration: $A_DUR"
           python3 -c "import sys; dur = float('$A_DUR'); sys.exit(0 if 9.95 <= dur <= 10.05 else 1)"
+
+      - name: Verify Gate 4 Cursor Diagnostics
+        run: |
+          zig build cursor-diag
+          ./zig-out/bin/cursor-diag /tmp/gate4_capture_live.cursor.jsonl
+
+      - name: Verify Gate 4 Captured MP4 with ffprobe
+        run: |
+          ffprobe -v error -show_format -show_streams /tmp/gate4_test_export.mp4
+          ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 /tmp/gate4_test_export.mp4 | grep -q "h264"
+          ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 /tmp/gate4_test_export.mp4 | grep -q "aac"
 
   windows-parity:
     name: Windows (WinRT / WGC Parity)

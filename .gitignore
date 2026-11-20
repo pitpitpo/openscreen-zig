@@ -13,4 +13,5 @@ zig-out/
 *.bin
 *.mp4
 *.gif
+*.cursor.jsonl
 zig-pkg/

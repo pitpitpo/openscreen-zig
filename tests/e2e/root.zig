@@ -4,6 +4,22 @@ const core = @import("core");
 const compositor = @import("compositor");
 const media = @import("media");
 const ffi = @import("ffi");
+const capture = @import("capture");
+const cursor_diag = @import("cursor_diag");
+
+fn sleepMs(ms: u32) void {
+    if (builtin.os.tag == .windows) {
+        const win = struct {
+            extern "kernel32" fn Sleep(dwMilliseconds: u32) callconv(.winapi) void;
+        };
+        win.Sleep(ms);
+    } else {
+        const posix_c = struct {
+            extern "c" fn usleep(usec: c_uint) c_int;
+        };
+        _ = posix_c.usleep(@as(c_uint, ms) * 1000);
+    }
+}
 
 extern "c" fn fseek(stream: *std.c.FILE, offset: c_long, whence: c_int) c_int;
 extern "c" fn ftell(stream: *std.c.FILE) c_long;
@@ -376,4 +392,181 @@ test "Gate 3: Real ONNX webcam segmentation matting" {
 
 fn totalPixels(w: u32, h: u32) usize {
     return @as(usize, w) * @as(usize, h);
+}
+
+test "Gate 4: Native capture, synchronized tracks, sidecar telemetry, and MP4 export" {
+    const allocator = std.testing.allocator;
+
+    // 1. Platform headless sanity: permissions and source enumeration
+    const perm_screen = ffi.capture.osc_capture_check_permission(@backingInt(ffi.capture.PermissionType.screen));
+    try std.testing.expect(perm_screen >= 0 and perm_screen <= 3);
+
+    const perm_audio = ffi.capture.osc_capture_check_permission(@backingInt(ffi.capture.PermissionType.audio));
+    try std.testing.expect(perm_audio >= 0 and perm_audio <= 3);
+
+    var displays: [8]ffi.capture.SourceInfo = undefined;
+    const disp_count = ffi.capture.osc_capture_enumerate_sources(
+        @backingInt(ffi.capture.SourceType.display),
+        &displays,
+        8,
+    );
+    try std.testing.expect(disp_count >= 0);
+
+    var windows: [32]ffi.capture.SourceInfo = undefined;
+    const win_count = ffi.capture.osc_capture_enumerate_sources(
+        @backingInt(ffi.capture.SourceType.window),
+        &windows,
+        32,
+    );
+    try std.testing.expect(win_count >= 0);
+
+    // 2. Perform live capture session across platforms
+    const tmp_dir = if (builtin.os.tag == .windows) "." else "/tmp";
+    const take_name = "gate4_capture_live";
+    var session = try capture.CaptureSession.init(allocator, .{
+        .output_dir = tmp_dir,
+        .take_name = take_name,
+        .target_fps = 30,
+        .capture_cursor = true,
+        .capture_system_audio = true,
+        .capture_mic_audio = true,
+    });
+    defer session.deinit();
+
+    const CaptureSink = struct {
+        frame_count: usize = 0,
+        last_width: u32 = 0,
+        last_height: u32 = 0,
+        last_frame: ?[]u8 = null,
+        alloc: std.mem.Allocator,
+
+        pub fn handleFrame(ctx: *anyopaque, frame: capture.capture.FrameData) void {
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            self.frame_count += 1;
+            self.last_width = frame.width;
+            self.last_height = frame.height;
+            if (self.last_frame == null) {
+                self.last_frame = self.alloc.alloc(u8, frame.data.len) catch null;
+            }
+            if (self.last_frame) |buf| {
+                if (buf.len == frame.data.len) {
+                    @memcpy(buf, frame.data);
+                }
+            }
+        }
+    };
+
+    var sink = CaptureSink{
+        .alloc = allocator,
+    };
+    defer {
+        if (sink.last_frame) |buf| allocator.free(buf);
+    }
+
+    session.setFrameHandler(CaptureSink.handleFrame, &sink);
+
+    // Start live capture
+    try session.start();
+    try std.testing.expectEqual(capture.SessionState.recording, session.state);
+
+    // Record for 1.0s
+    sleepMs(1000);
+
+    // Pause for 0.5s
+    try session.pause();
+    try std.testing.expectEqual(capture.SessionState.paused, session.state);
+    sleepMs(500);
+
+    // Resume for 0.5s
+    try session.@"resume"();
+    try std.testing.expectEqual(capture.SessionState.recording, session.state);
+    sleepMs(500);
+
+    // Clean stop
+    try session.stop();
+    try std.testing.expectEqual(capture.SessionState.stopped, session.state);
+
+    // Verify frames were captured
+    try std.testing.expect(sink.frame_count > 5);
+    try std.testing.expect(sink.last_width > 0);
+    try std.testing.expect(sink.last_height > 0);
+
+    // 3. Verify .cursor.jsonl sidecar via cursor_diag
+    const sidecar_path = if (builtin.os.tag == .windows) "gate4_capture_live.cursor.jsonl" else "/tmp/gate4_capture_live.cursor.jsonl";
+    const diag = try cursor_diag.analyzeSidecar(allocator, sidecar_path);
+    try std.testing.expect(diag.total_events > 0);
+    try std.testing.expect(diag.is_monotonic);
+    try std.testing.expect(diag.pause_gap_intact);
+    try std.testing.expect(diag.duration_ms > 400.0);
+
+    // 4. Export captured video to MP4 and verify via VideoDecoder
+    const export_path = if (builtin.os.tag == .windows) "gate4_test_export.mp4" else "/tmp/gate4_test_export.mp4";
+    const FrameFeeder = struct {
+        frame_data: []const u8,
+        pub fn renderFrame(ctx: *anyopaque, frame_idx: u64, out_rgba: []u8) anyerror!void {
+            _ = frame_idx;
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            @memcpy(out_rgba[0..self.frame_data.len], self.frame_data);
+        }
+    };
+
+    if (sink.last_frame) |frame_buf| {
+        var feeder = FrameFeeder{
+            .frame_data = frame_buf,
+        };
+        const provider = media.encoder.FrameProvider{
+            .ctx = &feeder,
+            .renderFrameFn = FrameFeeder.renderFrame,
+        };
+
+        const sample_rate: u32 = 44100;
+        const total_audio_floats = sample_rate * 2; // 1s stereo
+        const audio_samples = try allocator.alloc(f32, total_audio_floats);
+        defer allocator.free(audio_samples);
+        for (0..sample_rate) |i| {
+            const t = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(sample_rate));
+            audio_samples[i * 2 + 0] = @sin(t * 440.0 * 2.0 * std.math.pi) * 0.5;
+            audio_samples[i * 2 + 1] = @sin(t * 440.0 * 2.0 * std.math.pi) * 0.5;
+        }
+
+        try media.encoder.MediaEncoder.encodeMp4(
+            export_path,
+            .{
+                .width = sink.last_width,
+                .height = sink.last_height,
+                .fps = 30,
+                .video_bitrate = 2_000_000,
+                .audio_sample_rate = sample_rate,
+                .audio_channels = 2,
+                .audio_bitrate = 128_000,
+            },
+            30, // 1s at 30fps
+            provider,
+            audio_samples,
+            null,
+            null,
+            allocator,
+        );
+
+        // Verify with VideoDecoder
+        var dec = try media.decoder.VideoDecoder.open(allocator, export_path, 2);
+        defer dec.close();
+
+        try std.testing.expect(dec.hasVideo());
+        try std.testing.expect(dec.hasAudio());
+        const v_info = dec.info.?;
+        try std.testing.expectEqual(sink.last_width, v_info.width);
+        try std.testing.expectEqual(sink.last_height, v_info.height);
+
+        // Read decoded frame and verify it is non-blank
+        const check_buf = try allocator.alloc(u8, @as(usize, sink.last_width) * @as(usize, sink.last_height) * 4);
+        defer allocator.free(check_buf);
+        _ = try dec.getFrameAtPts(0, check_buf);
+
+        var non_blank: usize = 0;
+        for (check_buf) |b| {
+            if (b > 0) non_blank += 1;
+        }
+        try std.testing.expect(non_blank > 100);
+    }
 }

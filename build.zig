@@ -57,6 +57,7 @@ fn linkOpenScreenLibs(
     mod.addIncludePath(b.path("src/ffi/include"));
     mod.addIncludePath(b.path("src/ffi/whisper"));
     mod.addIncludePath(b.path("src/ffi/onnx"));
+    mod.addIncludePath(b.path("src/capture/shims"));
 
     const target_os = target.result.os.tag;
     if (target_os == .linux) {
@@ -66,14 +67,44 @@ fn linkOpenScreenLibs(
         mod.linkSystemLibrary("m", .{});
         mod.linkSystemLibrary("pthread", .{});
         mod.linkSystemLibrary("dl", .{});
+        mod.linkSystemLibrary("X11", .{});
+        mod.linkSystemLibrary("Xext", .{});
+        mod.linkSystemLibrary("Xfixes", .{});
+        mod.addCSourceFiles(.{
+            .root = b.path("src/capture/shims"),
+            .files = &.{"linux_pw.c"},
+            .flags = &.{ "-D_GNU_SOURCE", "-O3" },
+        });
     } else if (target_os == .macos) {
         mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
         mod.addIncludePath(.{ .cwd_relative = "/usr/local/include" });
         mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
         mod.addLibraryPath(.{ .cwd_relative = "/usr/local/lib" });
+        mod.linkFramework("ScreenCaptureKit", .{});
+        mod.linkFramework("AVFoundation", .{});
+        mod.linkFramework("CoreGraphics", .{});
+        mod.linkFramework("CoreMedia", .{});
+        mod.linkFramework("CoreVideo", .{});
+        mod.linkFramework("CoreAudio", .{});
+        mod.linkFramework("ApplicationServices", .{});
+        mod.linkFramework("Foundation", .{});
+        mod.addCSourceFiles(.{
+            .root = b.path("src/capture/shims"),
+            .files = &.{"macos_sck.m"},
+            .flags = &.{ "-fobjc-arc", "-O3" },
+        });
     } else if (target_os == .windows) {
         mod.addLibraryPath(b.path("lib"));
         mod.addIncludePath(b.path("include"));
+        mod.linkSystemLibrary("d3d11", .{});
+        mod.linkSystemLibrary("dxgi", .{});
+        mod.linkSystemLibrary("ole32", .{});
+        mod.linkSystemLibrary("oleaut32", .{});
+        mod.addCSourceFiles(.{
+            .root = b.path("src/capture/shims"),
+            .files = &.{"win_wgc.cpp"},
+            .flags = &.{ "-std=c++17", "-O3" },
+        });
     }
 
     mod.linkSystemLibrary("avformat", .{});
@@ -163,6 +194,24 @@ pub fn build(b: *std.Build) void {
     openscreen_compositor_mod.addImport("ffi", openscreen_ffi_mod);
     openscreen_compositor_mod.addImport("media", openscreen_media_mod);
 
+    // Capture module
+    const openscreen_capture_mod = b.createModule(.{
+        .root_source_file = b.path("src/capture/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    openscreen_capture_mod.addImport("core", openscreen_core_mod);
+    openscreen_capture_mod.addImport("ffi", openscreen_ffi_mod);
+    openscreen_capture_mod.addImport("media", openscreen_media_mod);
+
+    // Cursor diag module
+    const cursor_diag_mod = b.createModule(.{
+        .root_source_file = b.path("tools/cursor_diag.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    cursor_diag_mod.link_libc = true;
+
     // Main executable module
     const core_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -173,6 +222,7 @@ pub fn build(b: *std.Build) void {
     core_mod.addImport("compositor", openscreen_compositor_mod);
     core_mod.addImport("ffi", openscreen_ffi_mod);
     core_mod.addImport("media", openscreen_media_mod);
+    core_mod.addImport("capture", openscreen_capture_mod);
 
     // Main executable: openscreen
     const exe = b.addExecutable(.{
@@ -205,6 +255,8 @@ pub fn build(b: *std.Build) void {
     unit_mod.addImport("compositor", openscreen_compositor_mod);
     unit_mod.addImport("ffi", openscreen_ffi_mod);
     unit_mod.addImport("media", openscreen_media_mod);
+    unit_mod.addImport("capture", openscreen_capture_mod);
+    unit_mod.addImport("cursor_diag", cursor_diag_mod);
     const unit_tests = b.addTest(.{
         .root_module = unit_mod,
     });
@@ -241,6 +293,8 @@ pub fn build(b: *std.Build) void {
     e2e_mod.addImport("compositor", openscreen_compositor_mod);
     e2e_mod.addImport("ffi", openscreen_ffi_mod);
     e2e_mod.addImport("media", openscreen_media_mod);
+    e2e_mod.addImport("capture", openscreen_capture_mod);
+    e2e_mod.addImport("cursor_diag", cursor_diag_mod);
     const e2e_tests = b.addTest(.{
         .root_module = e2e_mod,
     });
@@ -252,11 +306,7 @@ pub fn build(b: *std.Build) void {
     // Tools: cursor-diag
     const cursor_diag_exe = b.addExecutable(.{
         .name = "cursor-diag",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("tools/cursor_diag.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = cursor_diag_mod,
     });
     const install_diag = b.addInstallArtifact(cursor_diag_exe, .{});
     const diag_step = b.step("cursor-diag", "Build cursor diagnostics tool");
