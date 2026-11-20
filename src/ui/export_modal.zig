@@ -22,9 +22,48 @@ pub const ExportModal = struct {
     is_exporting: bool = false,
     progress: f32 = 0.0,
     action_export: bool = false,
+    cancel_requested: bool = false,
+    worker_thread: ?std.Thread = null,
 
     pub fn init() ExportModal {
         return .{};
+    }
+
+    pub fn deinit(self: *ExportModal) void {
+        self.cancel_requested = true;
+        if (self.worker_thread) |t| {
+            t.join();
+            self.worker_thread = null;
+        }
+    }
+
+    fn workerFn(self: *ExportModal) void {
+        var p: f32 = 0.0;
+        while (p < 1.0 and !self.cancel_requested) {
+            p += 0.05;
+            self.progress = @min(1.0, p);
+            // Non-blocking step sleep
+            const posix_c = struct {
+                extern "c" fn usleep(usec: c_uint) c_int;
+            };
+            _ = posix_c.usleep(10_000); // 10ms
+        }
+        self.is_exporting = false;
+    }
+
+    pub fn startExport(self: *ExportModal) void {
+        if (self.is_exporting) return;
+        self.is_exporting = true;
+        self.cancel_requested = false;
+        self.progress = 0.0;
+        self.action_export = true;
+
+        if (std.Thread.spawn(.{}, workerFn, .{self})) |t| {
+            self.worker_thread = t;
+        } else |_| {
+            self.progress = 1.0;
+            self.is_exporting = false;
+        }
     }
 
     pub fn render(self: *ExportModal, ctx: *dvui.Context) !void {
@@ -104,13 +143,12 @@ pub const ExportModal = struct {
         const btn_w: f32 = 100.0;
         const btn_h: f32 = 32.0;
         if (try ctx.button("export_btn_cancel", "Cancel", .{ .x = box_x + box_w - btn_w * 2.0 - 24.0, .y = box_y + box_h - btn_h - 16.0, .w = btn_w, .h = btn_h })) {
+            self.cancel_requested = true;
             self.is_open = false;
         }
 
         if (try ctx.button("export_btn_start", "Export", .{ .x = box_x + box_w - btn_w - 16.0, .y = box_y + box_h - btn_h - 16.0, .w = btn_w, .h = btn_h })) {
-            self.is_exporting = true;
-            self.progress = 0.0;
-            self.action_export = true;
+            self.startExport();
         }
     }
 };

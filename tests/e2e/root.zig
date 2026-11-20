@@ -655,6 +655,20 @@ test "Gate 5: Headless CLI and MCP Stdio Child Process Integration" {
     try std.testing.expect(exp_f != null);
     _ = std.c.fclose(exp_f.?);
 
+    // Validate CLI export with ffprobe
+    const ffprobe_cmd = std.process.run(allocator, io, .{
+        .argv = &.{ "ffprobe", "-v", "error", "-show_format", "-show_streams", test_export },
+    }) catch null;
+    if (ffprobe_cmd) |probe| {
+        defer {
+            allocator.free(probe.stdout);
+            allocator.free(probe.stderr);
+        }
+        try std.testing.expectEqual(@as(u8, 0), probe.term.exited);
+        try std.testing.expect(std.mem.indexOf(u8, probe.stdout, "codec_type=video") != null or
+            std.mem.indexOf(u8, probe.stdout, "h264") != null);
+    }
+
     // 5. openscreen mcp (JSON-RPC 2.0 stdio server)
     var child = try std.process.spawn(io, .{
         .argv = &.{ exe_path, "mcp" },
@@ -742,6 +756,20 @@ test "Gate 5: Headless CLI and MCP Stdio Child Process Integration" {
     const exp_resp = try readResponseLine(&child.stdout.?, io, &buf_4k);
     try std.testing.expect(exp_resp.len > 0);
     try std.testing.expect(std.mem.indexOf(u8, exp_resp, "Exported successfully") != null);
+
+    // Validate MCP export with ffprobe
+    const mcp_probe_cmd = std.process.run(allocator, io, .{
+        .argv = &.{ "ffprobe", "-v", "error", "-show_format", "-show_streams", mcp_out },
+    }) catch null;
+    if (mcp_probe_cmd) |probe| {
+        defer {
+            allocator.free(probe.stdout);
+            allocator.free(probe.stderr);
+        }
+        try std.testing.expectEqual(@as(u8, 0), probe.term.exited);
+        try std.testing.expect(std.mem.indexOf(u8, probe.stdout, "codec_type=video") != null or
+            std.mem.indexOf(u8, probe.stdout, "h264") != null);
+    }
 
     // 5h. extract_frame (valid base64 PNG)
     const frame_req = "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"extract_frame\",\"arguments\":{\"timeSec\":0.5,\"width\":64,\"height\":36}}}\n";

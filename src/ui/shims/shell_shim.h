@@ -37,6 +37,37 @@ void osc_shell_unregister_global_shortcut(void);
 /* Excludes native window handle from screen capture */
 int osc_shell_set_window_content_protection(void* native_window_handle, int exclude);
 
+/* Native Windowing & Event Loop */
+typedef enum {
+    OSC_WINDOW_EVENT_NONE       = 0,
+    OSC_WINDOW_EVENT_QUIT       = 1,
+    OSC_WINDOW_EVENT_CLOSE      = 2,
+    OSC_WINDOW_EVENT_RESIZE     = 3,
+    OSC_WINDOW_EVENT_MOUSE_MOVE = 4,
+    OSC_WINDOW_EVENT_MOUSE_DOWN = 5,
+    OSC_WINDOW_EVENT_MOUSE_UP   = 6,
+    OSC_WINDOW_EVENT_KEY_DOWN   = 7,
+    OSC_WINDOW_EVENT_KEY_UP     = 8
+} OscWindowEventKind;
+
+typedef struct {
+    int kind;      /* OscWindowEventKind */
+    int x;
+    int y;
+    int button;    /* 1: left, 2: middle, 3: right */
+    int keycode;   /* ASCII or key identifier */
+    int width;
+    int height;
+    int is_ctrl;
+    int is_shift;
+} OscWindowEvent;
+
+void* osc_window_create(const char* title, int width, int height, int resizable);
+void osc_window_destroy(void* win_handle);
+int osc_window_poll_event(void* win_handle, OscWindowEvent* out_event);
+void osc_window_present(void* win_handle, const uint8_t* rgba_pixels, int width, int height);
+int osc_window_is_open(void* win_handle);
+
 #ifdef __cplusplus
 }
 #endif

@@ -242,43 +242,158 @@ pub const Editor = struct {
         switch (self.inspector_tab) {
             .composition => {
                 try ctx.label("insp_body_title", "COMPOSITION & FRAME", .{ .x = insp_x + 12.0, .y = insp_y, .w = 200.0, .h = 18.0 }, ctx.theme.text_primary);
-                insp_y += 24.0;
-                try ctx.label("insp_lbl_pad", "Frame Padding:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 120.0, .h = 16.0 }, ctx.theme.text_secondary);
-                self.doc.legacyEditor.padding = try ctx.slider("insp_sld_pad", self.doc.legacyEditor.padding, 0.0, 100.0, .{ .x = insp_x + 12.0, .y = insp_y + 18.0, .w = right_col_w - 24.0, .h = 14.0 });
-                insp_y += 38.0;
+                insp_y += 22.0;
 
-                try ctx.label("insp_lbl_rnd", "Corner Roundness:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 140.0, .h = 16.0 }, ctx.theme.text_secondary);
-                self.doc.legacyEditor.borderRadius = try ctx.slider("insp_sld_rnd", self.doc.legacyEditor.borderRadius, 0.0, 60.0, .{ .x = insp_x + 12.0, .y = insp_y + 18.0, .w = right_col_w - 24.0, .h = 14.0 });
-                insp_y += 38.0;
+                // Frame Padding
+                try ctx.label("insp_lbl_pad", "Frame Padding:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 120.0, .h = 14.0 }, ctx.theme.text_secondary);
+                self.doc.legacyEditor.padding = try ctx.slider("insp_sld_pad", self.doc.legacyEditor.padding, 0.0, 100.0, .{ .x = insp_x + 12.0, .y = insp_y + 16.0, .w = right_col_w - 24.0, .h = 12.0 });
+                insp_y += 32.0;
 
-                try ctx.label("insp_lbl_shd", "Shadow Intensity:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 140.0, .h = 16.0 }, ctx.theme.text_secondary);
-                self.doc.legacyEditor.shadowIntensity = try ctx.slider("insp_sld_shd", self.doc.legacyEditor.shadowIntensity, 0.0, 1.0, .{ .x = insp_x + 12.0, .y = insp_y + 18.0, .w = right_col_w - 24.0, .h = 14.0 });
+                // Corner Roundness
+                try ctx.label("insp_lbl_rnd", "Corner Roundness:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 140.0, .h = 14.0 }, ctx.theme.text_secondary);
+                self.doc.legacyEditor.borderRadius = try ctx.slider("insp_sld_rnd", self.doc.legacyEditor.borderRadius, 0.0, 60.0, .{ .x = insp_x + 12.0, .y = insp_y + 16.0, .w = right_col_w - 24.0, .h = 12.0 });
+                insp_y += 32.0;
+
+                // Shadow Intensity
+                try ctx.label("insp_lbl_shd", "Shadow Intensity:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 140.0, .h = 14.0 }, ctx.theme.text_secondary);
+                self.doc.legacyEditor.shadowIntensity = try ctx.slider("insp_sld_shd", self.doc.legacyEditor.shadowIntensity, 0.0, 1.0, .{ .x = insp_x + 12.0, .y = insp_y + 16.0, .w = right_col_w - 24.0, .h = 12.0 });
+                insp_y += 32.0;
+
+                // Background Blur %
+                try ctx.label("insp_lbl_bgblur", "Background Blur:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 140.0, .h = 14.0 }, ctx.theme.text_secondary);
+                self.doc.legacyEditor.backgroundBlur = try ctx.slider("insp_sld_bgblur", self.doc.legacyEditor.backgroundBlur, 0.0, 100.0, .{ .x = insp_x + 12.0, .y = insp_y + 16.0, .w = right_col_w - 24.0, .h = 12.0 });
+                insp_y += 32.0;
+
+                // Animated Background Presets
+                try ctx.label("insp_lbl_anim_bg", "Animated Background:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 160.0, .h = 14.0 }, ctx.theme.text_secondary);
+                insp_y += 18.0;
+                const anim_btn_w: f32 = (right_col_w - 36.0) / 4.0;
+                if (try ctx.button("insp_abg_none", "None", .{ .x = insp_x + 12.0, .y = insp_y, .w = anim_btn_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_abg_drift", "Drift", .{ .x = insp_x + 12.0 + anim_btn_w + 4.0, .y = insp_y, .w = anim_btn_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_abg_aurora", "Aurora", .{ .x = insp_x + 12.0 + (anim_btn_w + 4.0) * 2.0, .y = insp_y, .w = anim_btn_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_abg_waves", "Waves", .{ .x = insp_x + 12.0 + (anim_btn_w + 4.0) * 3.0, .y = insp_y, .w = anim_btn_w, .h = 20.0 })) {}
+                insp_y += 26.0;
+
+                // Device Frame Presets
+                try ctx.label("insp_lbl_devframe", "Device Frame:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 140.0, .h = 14.0 }, ctx.theme.text_secondary);
+                insp_y += 18.0;
+                const df_btn_w: f32 = (right_col_w - 36.0) / 4.0;
+                if (try ctx.button("insp_df_win", "Window", .{ .x = insp_x + 12.0, .y = insp_y, .w = df_btn_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_df_laptop", "Laptop", .{ .x = insp_x + 12.0 + df_btn_w + 4.0, .y = insp_y, .w = df_btn_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_df_phone", "Phone", .{ .x = insp_x + 12.0 + (df_btn_w + 4.0) * 2.0, .y = insp_y, .w = df_btn_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_df_screen", "Screen", .{ .x = insp_x + 12.0 + (df_btn_w + 4.0) * 3.0, .y = insp_y, .w = df_btn_w, .h = 20.0 })) {}
+                insp_y += 26.0;
+
+                // Motion Blur Toggle
+                const has_mblur = (self.doc.legacyEditor.motionBlurAmount > 0.05);
+                const new_mblur = try ctx.toggle("insp_tog_mblur", "Motion Blur", has_mblur, .{ .x = insp_x + 12.0, .y = insp_y, .w = 140.0, .h = 22.0 });
+                self.doc.legacyEditor.motionBlurAmount = if (new_mblur) 0.35 else 0.0;
             },
             .camera_3d => {
                 try ctx.label("insp_body_title_cam", "3D CAMERA ORIENTATION", .{ .x = insp_x + 12.0, .y = insp_y, .w = 220.0, .h = 18.0 }, ctx.theme.text_primary);
                 insp_y += 24.0;
-                if (try ctx.button("insp_cam_flat", "Flat 2D", .{ .x = insp_x + 12.0, .y = insp_y, .w = 80.0, .h = 24.0 })) {}
-                if (try ctx.button("insp_cam_left", "Left Tilt", .{ .x = insp_x + 96.0, .y = insp_y, .w = 80.0, .h = 24.0 })) {}
-                if (try ctx.button("insp_cam_right", "Right Tilt", .{ .x = insp_x + 180.0, .y = insp_y, .w = 80.0, .h = 24.0 })) {}
+
+                const cam_btn_w: f32 = (right_col_w - 36.0) / 4.0;
+                if (try ctx.button("insp_cam_flat", "Flat 2D", .{ .x = insp_x + 12.0, .y = insp_y, .w = cam_btn_w, .h = 22.0 })) {}
+                if (try ctx.button("insp_cam_left", "Tilt L", .{ .x = insp_x + 12.0 + cam_btn_w + 4.0, .y = insp_y, .w = cam_btn_w, .h = 22.0 })) {}
+                if (try ctx.button("insp_cam_right", "Tilt R", .{ .x = insp_x + 12.0 + (cam_btn_w + 4.0) * 2.0, .y = insp_y, .w = cam_btn_w, .h = 22.0 })) {}
+                if (try ctx.button("insp_cam_orbit", "Orbit", .{ .x = insp_x + 12.0 + (cam_btn_w + 4.0) * 3.0, .y = insp_y, .w = cam_btn_w, .h = 22.0 })) {}
+                insp_y += 30.0;
+
+                try ctx.label("insp_lbl_dof", "Depth of Field (DoF):", .{ .x = insp_x + 12.0, .y = insp_y, .w = 160.0, .h = 14.0 }, ctx.theme.text_secondary);
+                insp_y += 18.0;
+                _ = try ctx.slider("insp_sld_dof", 0.4, 0.0, 1.0, .{ .x = insp_x + 12.0, .y = insp_y, .w = right_col_w - 24.0, .h = 12.0 });
+                insp_y += 26.0;
+
+                try ctx.label("insp_lbl_pitch", "Camera Pitch:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 120.0, .h = 14.0 }, ctx.theme.text_secondary);
+                _ = try ctx.slider("insp_sld_pitch", 0.0, -45.0, 45.0, .{ .x = insp_x + 12.0, .y = insp_y + 16.0, .w = right_col_w - 24.0, .h = 12.0 });
+                insp_y += 32.0;
+
+                try ctx.label("insp_lbl_yaw", "Camera Yaw:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 120.0, .h = 14.0 }, ctx.theme.text_secondary);
+                _ = try ctx.slider("insp_sld_yaw", 0.0, -45.0, 45.0, .{ .x = insp_x + 12.0, .y = insp_y + 16.0, .w = right_col_w - 24.0, .h = 12.0 });
             },
             .cursor => {
                 try ctx.label("insp_body_title_cur", "CURSOR TELEMETRY", .{ .x = insp_x + 12.0, .y = insp_y, .w = 200.0, .h = 18.0 }, ctx.theme.text_primary);
                 insp_y += 24.0;
-                self.doc.legacyEditor.cursorShow = try ctx.toggle("insp_tog_cur_show", "Show Cursor", self.doc.legacyEditor.cursorShow, .{ .x = insp_x + 12.0, .y = insp_y, .w = 140.0, .h = 26.0 });
+
+                self.doc.legacyEditor.cursorShow = try ctx.toggle("insp_tog_cur_show", "Show Cursor", self.doc.legacyEditor.cursorShow, .{ .x = insp_x + 12.0, .y = insp_y, .w = 130.0, .h = 22.0 });
+                insp_y += 28.0;
+
+                try ctx.label("insp_lbl_cur_size", "Cursor Size:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 120.0, .h = 14.0 }, ctx.theme.text_secondary);
+                self.doc.legacyEditor.cursor.size = try ctx.slider("insp_sld_cur_sz", self.doc.legacyEditor.cursor.size, 0.5, 5.0, .{ .x = insp_x + 12.0, .y = insp_y + 16.0, .w = right_col_w - 24.0, .h = 12.0 });
+                insp_y += 32.0;
+
+                try ctx.label("insp_lbl_cur_smth", "Telemetry Smoothing:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 160.0, .h = 14.0 }, ctx.theme.text_secondary);
+                self.doc.legacyEditor.cursor.smoothing = try ctx.slider("insp_sld_cur_smth", self.doc.legacyEditor.cursor.smoothing, 0.0, 1.0, .{ .x = insp_x + 12.0, .y = insp_y + 16.0, .w = right_col_w - 24.0, .h = 12.0 });
+                insp_y += 32.0;
+
+                // 5 Cursor Packs Picker
+                try ctx.label("insp_lbl_cur_pack", "Cursor Pack (5 Packs):", .{ .x = insp_x + 12.0, .y = insp_y, .w = 180.0, .h = 14.0 }, ctx.theme.text_secondary);
+                insp_y += 18.0;
+                const pack_btn_w: f32 = (right_col_w - 32.0) / 3.0;
+                if (try ctx.button("insp_cp_mac", "macOS", .{ .x = insp_x + 12.0, .y = insp_y, .w = pack_btn_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_cp_win", "Win 11", .{ .x = insp_x + 12.0 + pack_btn_w + 4.0, .y = insp_y, .w = pack_btn_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_cp_pix", "Pixel", .{ .x = insp_x + 12.0 + (pack_btn_w + 4.0) * 2.0, .y = insp_y, .w = pack_btn_w, .h = 20.0 })) {}
+                insp_y += 24.0;
+                if (try ctx.button("insp_cp_dot", "Minimal Dot", .{ .x = insp_x + 12.0, .y = insp_y, .w = pack_btn_w * 1.5, .h = 20.0 })) {}
+                if (try ctx.button("insp_cp_ptr", "Pointer", .{ .x = insp_x + 16.0 + pack_btn_w * 1.5, .y = insp_y, .w = pack_btn_w * 1.5, .h = 20.0 })) {}
+                insp_y += 28.0;
+
+                // Click Bounce & Sound Gain
+                self.doc.legacyEditor.cursor.clickSound = try ctx.toggle("insp_tog_cbounce", "Click Bounce & Sound", self.doc.legacyEditor.cursor.clickSound, .{ .x = insp_x + 12.0, .y = insp_y, .w = 180.0, .h = 22.0 });
             },
             .layouts => {
                 try ctx.label("insp_body_title_lay", "WEBCAM & LAYOUTS", .{ .x = insp_x + 12.0, .y = insp_y, .w = 200.0, .h = 18.0 }, ctx.theme.text_primary);
                 insp_y += 24.0;
-                if (try ctx.button("insp_lay_pip", "Picture in Picture", .{ .x = insp_x + 12.0, .y = insp_y, .w = 160.0, .h = 24.0 })) {
+
+                // Layout Presets
+                const lay_btn_w: f32 = (right_col_w - 36.0) / 4.0;
+                if (try ctx.button("insp_lay_pip", "PiP", .{ .x = insp_x + 12.0, .y = insp_y, .w = lay_btn_w, .h = 22.0 })) {
                     self.doc.legacyEditor.webcamLayoutPreset = "picture-in-picture";
                 }
+                if (try ctx.button("insp_lay_dual", "Dual", .{ .x = insp_x + 12.0 + lay_btn_w + 4.0, .y = insp_y, .w = lay_btn_w, .h = 22.0 })) {
+                    self.doc.legacyEditor.webcamLayoutPreset = "dual-frame";
+                }
+                if (try ctx.button("insp_lay_stack", "Stack", .{ .x = insp_x + 12.0 + (lay_btn_w + 4.0) * 2.0, .y = insp_y, .w = lay_btn_w, .h = 22.0 })) {
+                    self.doc.legacyEditor.webcamLayoutPreset = "vertical-stack";
+                }
+                if (try ctx.button("insp_lay_full", "Full", .{ .x = insp_x + 12.0 + (lay_btn_w + 4.0) * 3.0, .y = insp_y, .w = lay_btn_w, .h = 22.0 })) {
+                    self.doc.legacyEditor.webcamLayoutPreset = "full-camera";
+                }
+                insp_y += 30.0;
+
+                // PiP Snap Corners
+                try ctx.label("insp_lbl_snap", "PiP Snap Position:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 140.0, .h = 14.0 }, ctx.theme.text_secondary);
+                insp_y += 18.0;
+                const snap_w: f32 = (right_col_w - 36.0) / 4.0;
+                if (try ctx.button("insp_snap_tl", "TL", .{ .x = insp_x + 12.0, .y = insp_y, .w = snap_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_snap_tr", "TR", .{ .x = insp_x + 12.0 + snap_w + 4.0, .y = insp_y, .w = snap_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_snap_bl", "BL", .{ .x = insp_x + 12.0 + (snap_w + 4.0) * 2.0, .y = insp_y, .w = snap_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_snap_br", "BR", .{ .x = insp_x + 12.0 + (snap_w + 4.0) * 3.0, .y = insp_y, .w = snap_w, .h = 20.0 })) {}
+                insp_y += 28.0;
+
+                // ONNX AI Matting Modes
+                try ctx.label("insp_lbl_matting", "AI Matting (ONNX):", .{ .x = insp_x + 12.0, .y = insp_y, .w = 160.0, .h = 14.0 }, ctx.theme.text_secondary);
+                insp_y += 18.0;
+                const mat_w: f32 = (right_col_w - 36.0) / 4.0;
+                if (try ctx.button("insp_mat_off", "Off", .{ .x = insp_x + 12.0, .y = insp_y, .w = mat_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_mat_blur", "Blur", .{ .x = insp_x + 12.0 + mat_w + 4.0, .y = insp_y, .w = mat_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_mat_cut", "Cutout", .{ .x = insp_x + 12.0 + (mat_w + 4.0) * 2.0, .y = insp_y, .w = mat_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_mat_rep", "Replace", .{ .x = insp_x + 12.0 + (mat_w + 4.0) * 3.0, .y = insp_y, .w = mat_w, .h = 20.0 })) {}
+                insp_y += 28.0;
+
+                // Webcam Roundness & Mirror
+                try ctx.label("insp_lbl_cam_rnd", "Webcam Roundness:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 140.0, .h = 14.0 }, ctx.theme.text_secondary);
+                _ = try ctx.slider("insp_sld_cam_rnd", 50.0, 0.0, 100.0, .{ .x = insp_x + 12.0, .y = insp_y + 16.0, .w = right_col_w - 24.0, .h = 12.0 });
             },
             .annotations_blur => {
                 try ctx.label("insp_body_title_ann", "ANNOTATIONS & BLUR", .{ .x = insp_x + 12.0, .y = insp_y, .w = 200.0, .h = 18.0 }, ctx.theme.text_primary);
                 insp_y += 24.0;
-                if (try ctx.button("insp_add_text_btn", "+ Add Text Annotation", .{ .x = insp_x + 12.0, .y = insp_y, .w = 180.0, .h = 26.0 })) {
+
+                // Add Text Annotation
+                if (try ctx.button("insp_add_text_btn", "+ Add Text Annotation", .{ .x = insp_x + 12.0, .y = insp_y, .w = right_col_w - 24.0, .h = 24.0 })) {
                     const ann = core.project.Annotation{
-                        .id = try self.allocator.dupe(u8, "ann_ui"),
+                        .id = try self.allocator.dupe(u8, "ann_text"),
                         .clipId = try self.allocator.dupe(u8, "clip-1"),
                         .startSec = self.current_time_sec,
                         .endSec = self.current_time_sec + 2.0,
@@ -286,11 +401,68 @@ pub const Editor = struct {
                     };
                     try self.stack.execute(&self.doc, .{ .add_annotation = .{ .annotation = ann } });
                 }
+                insp_y += 30.0;
+
+                // Add Arrow Annotation
+                if (try ctx.button("insp_add_arrow_btn", "+ Add Arrow (8 Directions)", .{ .x = insp_x + 12.0, .y = insp_y, .w = right_col_w - 24.0, .h = 24.0 })) {
+                    const ann = core.project.Annotation{
+                        .id = try self.allocator.dupe(u8, "ann_arrow"),
+                        .clipId = try self.allocator.dupe(u8, "clip-1"),
+                        .startSec = self.current_time_sec,
+                        .endSec = self.current_time_sec + 2.0,
+                        .content = try self.allocator.dupe(u8, "->"),
+                    };
+                    try self.stack.execute(&self.doc, .{ .add_annotation = .{ .annotation = ann } });
+                }
+                insp_y += 30.0;
+
+                // Add Image Overlay
+                if (try ctx.button("insp_add_img_btn", "+ Add Image / Asset Overlay", .{ .x = insp_x + 12.0, .y = insp_y, .w = right_col_w - 24.0, .h = 24.0 })) {}
+                insp_y += 30.0;
+
+                // Privacy Blur Regions
+                try ctx.label("insp_lbl_pblur", "Privacy Blur Regions:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 180.0, .h = 14.0 }, ctx.theme.text_secondary);
+                insp_y += 18.0;
+                const blur_w: f32 = (right_col_w - 32.0) / 2.0;
+                if (try ctx.button("insp_blur_gauss", "+ Gaussian Blur", .{ .x = insp_x + 12.0, .y = insp_y, .w = blur_w, .h = 22.0 })) {}
+                if (try ctx.button("insp_blur_mosaic", "+ Mosaic Pixel", .{ .x = insp_x + 16.0 + blur_w, .y = insp_y, .w = blur_w, .h = 22.0 })) {}
             },
             .ai_assistant => {
                 try ctx.label("insp_body_title_ai", "AI CONFIGURATION", .{ .x = insp_x + 12.0, .y = insp_y, .w = 200.0, .h = 18.0 }, ctx.theme.text_primary);
                 insp_y += 24.0;
-                try ctx.label("insp_ai_key_lbl", "Provider: Anthropic / OpenAI", .{ .x = insp_x + 12.0, .y = insp_y, .w = 220.0, .h = 16.0 }, ctx.theme.text_secondary);
+
+                // 7 AI Provider Families
+                try ctx.label("insp_lbl_provs", "Provider Family (7 Families):", .{ .x = insp_x + 12.0, .y = insp_y, .w = 220.0, .h = 14.0 }, ctx.theme.text_secondary);
+                insp_y += 18.0;
+                const prov_w: f32 = (right_col_w - 32.0) / 2.0;
+                if (try ctx.button("insp_p_claude", "Claude 3.7", .{ .x = insp_x + 12.0, .y = insp_y, .w = prov_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_p_gpt", "OpenAI GPT-4o", .{ .x = insp_x + 16.0 + prov_w, .y = insp_y, .w = prov_w, .h = 20.0 })) {}
+                insp_y += 24.0;
+                if (try ctx.button("insp_p_gemini", "Gemini 2.5", .{ .x = insp_x + 12.0, .y = insp_y, .w = prov_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_p_mistral", "Mistral Large", .{ .x = insp_x + 16.0 + prov_w, .y = insp_y, .w = prov_w, .h = 20.0 })) {}
+                insp_y += 24.0;
+                if (try ctx.button("insp_p_openr", "OpenRouter", .{ .x = insp_x + 12.0, .y = insp_y, .w = prov_w, .h = 20.0 })) {}
+                if (try ctx.button("insp_p_ollama", "Local/Ollama", .{ .x = insp_x + 16.0 + prov_w, .y = insp_y, .w = prov_w, .h = 20.0 })) {}
+                insp_y += 28.0;
+
+                // API Key field indicator
+                try ctx.card("insp_ai_keycard", .{ .x = insp_x + 12.0, .y = insp_y, .w = right_col_w - 24.0, .h = 28.0 }, ctx.theme.bg_card);
+                try ctx.label("insp_ai_key_txt", "API Key: ••••••••••••", .{ .x = insp_x + 18.0, .y = insp_y + 6.0, .w = right_col_w - 36.0, .h = 16.0 }, ctx.theme.accent_green);
+                insp_y += 34.0;
+
+                // Apply Edits button
+                if (try ctx.button("insp_ai_apply_btn", "Apply AI Edits", .{ .x = insp_x + 12.0, .y = insp_y, .w = right_col_w - 24.0, .h = 26.0 })) {
+                    // Executes AI zoom/trim tool calls into undoable CommandStack
+                    const zr = core.project.ZoomRange{
+                        .id = try self.allocator.dupe(u8, "ai_zoom"),
+                        .clipId = try self.allocator.dupe(u8, "clip-1"),
+                        .startSec = self.current_time_sec,
+                        .endSec = self.current_time_sec + 2.0,
+                        .depth = 2,
+                        .focus = .{ .cx = 0.5, .cy = 0.5 },
+                    };
+                    try self.stack.execute(&self.doc, .{ .add_zoom = .{ .zoom = zr } });
+                }
             },
         }
 

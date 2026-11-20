@@ -41,6 +41,17 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
+    // Check if arguments specify --test-gui-smoke
+    if (arg_list.items.len > 1 and std.mem.eql(u8, arg_list.items[1], "--test-gui-smoke")) {
+        var app = ui.App.init(allocator);
+        defer app.deinit();
+        const exit_code = try app.runSmokeTest();
+        if (exit_code != 0) {
+            std.process.exit(exit_code);
+        }
+        return;
+    }
+
     // GUI Mode: either launched without arguments or with a project file path
     const maybe_proj: ?[]const u8 = if (arg_list.items.len > 1) arg_list.items[1] else null;
     var app = ui.App.init(allocator);

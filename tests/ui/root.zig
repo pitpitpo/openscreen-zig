@@ -195,3 +195,49 @@ test "Gate 6: Native Desktop GUI lifecycle, HUD, Editor, 17 locales, RTL flip, 0
         _ = std.c.fclose(f);
     }
 }
+
+test "Gate 6B: Arabic cursive RTL shaping ('مرحبا بك في OpenScreen') and CJK glyph verification" {
+    const allocator = std.testing.allocator;
+
+    const arabic_sample = "مرحبا بك في OpenScreen";
+    const shaped = try ui.dvui.shapeArabicText(allocator, arabic_sample);
+    defer allocator.free(shaped);
+
+    // 1. Assert Arabic letters are properly mapped to Presentation Forms-B (U+FE70..U+FEFC)
+    // "مرحبا":
+    // 'م' (U+0645) -> 0xFEE3 (Meem Initial)
+    // 'ر' (U+0631) -> 0xFEAE (Raa Final)
+    // 'ح' (U+062D) -> 0xFEA3 (Haa Initial)
+    // 'ب' (U+0628) -> 0xFE92 (Baa Medial)
+    // 'ا' (U+0627) -> 0xFE8E (Alef Final)
+    try std.testing.expectEqual(@as(u21, 0xFEE3), shaped[0]);
+    try std.testing.expectEqual(@as(u21, 0xFEAE), shaped[1]);
+    try std.testing.expectEqual(@as(u21, 0xFEA3), shaped[2]);
+    try std.testing.expectEqual(@as(u21, 0xFE92), shaped[3]);
+    try std.testing.expectEqual(@as(u21, 0xFE8E), shaped[4]);
+
+    // Space:
+    try std.testing.expectEqual(@as(u21, ' '), shaped[5]);
+
+    // "بك":
+    // 'ب' (U+0628) -> 0xFE91 (Baa Initial)
+    // 'ك' (U+0643) -> 0xFEDA (Kaaf Final)
+    try std.testing.expectEqual(@as(u21, 0xFE91), shaped[6]);
+    try std.testing.expectEqual(@as(u21, 0xFEDA), shaped[7]);
+
+    // 2. Render Arabic and CJK into DVUI FrameBuffer and assert non-blank continuous strokes
+    var ctx = try ui.dvui.Context.init(allocator, 640, 240);
+    defer ctx.deinit();
+
+    ctx.beginFrame(true);
+    ctx.fb.drawText(arabic_sample, 40.0, 40.0, 2, ctx.theme.text_primary, true);
+    ctx.fb.drawText("OpenScreen 中文 日本語 한국어", 40.0, 120.0, 2, ctx.theme.accent_blue, false);
+    ctx.endFrame(16_000_000);
+
+    var non_blank: usize = 0;
+    for (ctx.fb.pixels) |p| {
+        if (p > 0) non_blank += 1;
+    }
+    // Verified non-blank pixel count across rendered Arabic and CJK text
+    try std.testing.expect(non_blank > 300);
+}

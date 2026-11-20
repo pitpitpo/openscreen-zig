@@ -690,6 +690,15 @@ test "ai: loopback 127.0.0.1 mock HTTP server, real std.http.Client, tool execut
     });
     defer ai_client.deinit();
 
+    // 1a. Test SSE streaming format parsing
+    const sse_stream_data = "event: message\r\ndata: {\"content\":\"SSE Translated: Bonjour le monde\",\"tool_calls\":[{\"name\":\"add_zoom\",\"arguments\":\"{}\"}]}\r\n\r\n";
+    var sse_parsed = try ai_client.parseResponse(sse_stream_data);
+    defer sse_parsed.deinit();
+    try std.testing.expect(std.mem.indexOf(u8, sse_parsed.text, "SSE Translated") != null);
+    try std.testing.expectEqual(@as(usize, 1), sse_parsed.tool_calls.len);
+    try std.testing.expectEqualStrings("add_zoom", sse_parsed.tool_calls[0].name);
+
+    // 1b. Test live HTTP socket roundtrip
     const msgs = [_]ai.client.Message{
         .{ .role = "user", .content = "Hello mock AI" },
     };

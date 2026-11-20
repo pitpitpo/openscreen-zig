@@ -72,6 +72,9 @@ jobs:
       - name: Run Gate 6 offscreen desktop GUI tests
         run: xvfb-run -a zig build test-ui
 
+      - name: Run Gate 6B Native Desktop GUI smoke test (X11 event loop under Xvfb)
+        run: xvfb-run -a ./zig-out/bin/openscreen --test-gui-smoke
+
       - name: Run golden pixel & SSIM tests (GPU + CPU fallback)
         run: xvfb-run -a zig build test-golden
 
