@@ -10,4 +10,5 @@ zig-out/
 *.dylib
 *.dll
 *.ppm
+*.bin
 zig-pkg/

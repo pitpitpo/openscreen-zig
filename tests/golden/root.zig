@@ -348,6 +348,11 @@ test "Gate 2: SSIM >= 0.98 between gpu_wgpu and cpu_fallback + 0 memory leaks ov
     var gpu = try GpuCompositor.init(allocator, 1920, 1080);
     defer gpu.deinit();
 
+    // Confirm that gpu_wgpu actually ran on active GPU (Lavapipe/WARP/Metal)
+    // and did NOT silently fall back to CPU.
+    try std.testing.expect(gpu.has_active_gpu);
+    std.debug.print("\n>>> Active GPU Backend Verified (adapterType={d}) <<<\n", .{gpu.getAdapterType()});
+
     const scene = SceneConfig{
         .padding_px = 60.0,
         .corner_radius_px = 24.0,

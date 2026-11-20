@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const wgpu = @import("ffi");
+pub const wgpu = @import("ffi").wgpu;
 pub const compositor = @import("compositor.zig");
 pub const layer = @import("layer.zig");
 pub const cpu_fallback = @import("cpu_fallback.zig");
@@ -70,6 +70,13 @@ pub const GpuCompositor = struct {
         }
 
         return comp;
+    }
+
+    pub fn getAdapterType(self: *const GpuCompositor) u32 {
+        if (!self.has_active_gpu or self.adapter == null) return 0;
+        var info: wgpu.WGPUAdapterInfo = .{};
+        wgpu.wgpuAdapterGetInfo(self.adapter, &info);
+        return info.adapterType;
     }
 
     fn initGpuPipeline(self: *GpuCompositor) !void {
