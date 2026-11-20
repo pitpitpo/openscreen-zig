@@ -95,7 +95,7 @@ int osc_shell_tray_init(const char* tooltip, OscTrayCallback callback, void* use
     g_nid.uID = 1001;
     g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     g_nid.uCallbackMessage = WM_TRAY_NOTIFY;
-    g_nid.hIcon = LoadIconW(NULL, IDI_APPLICATION);
+    g_nid.hIcon = LoadIconW(NULL, MAKEINTRESOURCEW(32512));
     if (tooltip) {
         MultiByteToWideChar(CP_UTF8, 0, tooltip, -1, g_nid.szTip, sizeof(g_nid.szTip) / sizeof(WCHAR));
     }
