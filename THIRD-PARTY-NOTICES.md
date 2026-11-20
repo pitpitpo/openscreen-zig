@@ -250,6 +250,19 @@ generated at build time and shipped beside this file.
 - **Apache-2.0 OR GPL-2.0-only** (1): self_cell 1.3.0.
 - **(MIT OR Apache-2.0) AND Unicode-3.0** (1): unicode-ident 1.0.24.
 
+## stb_truetype — TrueType font rasterizer
+
+- **Component**: `src/ffi/include/stb_truetype.h`, compiled into OpenScreen.
+- **Used by**: UI text rasterization, Arabic cursive text rendering, and video caption burning.
+- **License**: **Public Domain / MIT** (<https://github.com/nothings/stb>).
+- **Author**: Sean Barrett.
+
+## wgpu-native — WebGPU native implementation
+
+- **Component**: `libwgpu_native.a` / `wgpu_native.dll` / `libwgpu_native.dylib`.
+- **Used by**: cross-platform hardware-accelerated compositor (Metal on macOS, D3D12/WARP on Windows, Vulkan/CPU on Linux).
+- **License**: **MIT OR Apache-2.0** (<https://github.com/gfx-rs/wgpu-native>).
+
 ## Kenney UI Audio — click sounds
 
 - **Components**: `sounds/click-down.wav` and `sounds/click-up.wav`, inside the

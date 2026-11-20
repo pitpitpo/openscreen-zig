@@ -222,6 +222,61 @@ void* osc_window_create(const char* title, int width, int height, int resizable)
     return (void*)win;
 }
 
+void* osc_window_create_hud(const char* title, int width, int height) {
+    OscWin32Window* win = (OscWin32Window*)calloc(1, sizeof(OscWin32Window));
+    if (!win) return NULL;
+
+    win->width = width > 0 ? width : 780;
+    win->height = height > 0 ? height : 48;
+    win->is_open = 1;
+
+    WNDCLASSEXW wc = {0};
+    wc.cbSize = sizeof(WNDCLASSEXW);
+    wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wc.lpfnWndProc = OscWindowProc;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.hCursor = LoadCursorW(NULL, MAKEINTRESOURCEW(32512));
+    wc.lpszClassName = L"OpenScreenHudWindowClass";
+    RegisterClassExW(&wc);
+
+    wchar_t title_w[256] = L"OpenScreen HUD";
+    if (title) {
+        MultiByteToWideChar(CP_UTF8, 0, title, -1, title_w, 256);
+    }
+
+    // Borderless and Always-on-Top
+    HWND hwnd = CreateWindowExW(
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+        L"OpenScreenHudWindowClass",
+        title_w,
+        WS_POPUP | WS_VISIBLE,
+        CW_USEDEFAULT, 20,
+        win->width, win->height,
+        NULL, NULL, GetModuleHandleW(NULL), NULL
+    );
+
+    if (!hwnd) {
+        win->is_offscreen_dummy = 1;
+        return (void*)win;
+    }
+
+    win->hwnd = hwnd;
+    win->hdc = GetDC(hwnd);
+    SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)win);
+
+    const char* disable_cp = getenv("OPENSCREEN_DISABLE_CONTENT_PROTECTION");
+    if (disable_cp && strcmp(disable_cp, "1") == 0) {
+        fprintf(stderr, "[content-protection] OFF\n");
+    } else {
+        osc_shell_set_window_content_protection((void*)hwnd, 1);
+        fprintf(stderr, "[content-protection] ON\n");
+    }
+
+    ShowWindow(hwnd, SW_SHOW);
+    UpdateWindow(hwnd);
+    return (void*)win;
+}
+
 void osc_window_destroy(void* win_handle) {
     if (!win_handle) return;
     OscWin32Window* win = (OscWin32Window*)win_handle;
@@ -275,6 +330,27 @@ int osc_window_poll_event(void* win_handle, OscWindowEvent* out_event) {
                 out_event->y = HIWORD(msg.lParam);
                 out_event->button = 1;
                 return 1;
+            case WM_MOUSEWHEEL: {
+                short delta = (short)HIWORD(msg.wParam);
+                out_event->kind = OSC_WINDOW_EVENT_MOUSE_WHEEL;
+                out_event->wheel_dy = (float)delta / 120.0f;
+                return 1;
+            }
+            case WM_MOUSEHWHEEL: {
+                short delta = (short)HIWORD(msg.wParam);
+                out_event->kind = OSC_WINDOW_EVENT_MOUSE_WHEEL;
+                out_event->wheel_dx = (float)delta / 120.0f;
+                return 1;
+            }
+            case WM_CHAR: {
+                wchar_t wc_ch = (wchar_t)msg.wParam;
+                if (wc_ch >= 32) {
+                    out_event->kind = OSC_WINDOW_EVENT_TEXT_INPUT;
+                    WideCharToMultiByte(CP_UTF8, 0, &wc_ch, 1, out_event->text, sizeof(out_event->text) - 1, NULL, NULL);
+                    return 1;
+                }
+                break;
+            }
             case WM_KEYDOWN:
                 out_event->kind = OSC_WINDOW_EVENT_KEY_DOWN;
                 out_event->keycode = (int)msg.wParam;
@@ -359,6 +435,7 @@ int osc_shell_register_global_shortcut(const char* shortcut_desc, OscShortcutCal
 void osc_shell_unregister_global_shortcut(void) {}
 int osc_shell_set_window_content_protection(void* native_window_handle, int exclude) { (void)native_window_handle; (void)exclude; return 1; }
 void* osc_window_create(const char* title, int width, int height, int resizable) { (void)title; (void)width; (void)height; (void)resizable; return (void*)1; }
+void* osc_window_create_hud(const char* title, int width, int height) { (void)title; (void)width; (void)height; return (void*)1; }
 void osc_window_destroy(void* win_handle) { (void)win_handle; }
 int osc_window_poll_event(void* win_handle, OscWindowEvent* out_event) { (void)win_handle; (void)out_event; return 0; }
 void osc_window_present(void* win_handle, const uint8_t* rgba_pixels, int width, int height) { (void)win_handle; (void)rgba_pixels; (void)width; (void)height; }

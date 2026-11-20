@@ -15,3 +15,6 @@ zig-out/
 *.gif
 *.cursor.jsonl
 zig-pkg/
+dist/
+screenshots/
+

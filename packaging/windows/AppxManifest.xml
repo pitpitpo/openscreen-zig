@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         IgnorableNamespaces="uap rescap">
+  <Identity Name="OpenScreen.App"
+            Publisher="CN=OpenScreen"
+            Version="1.0.0.0"
+            ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>OpenScreen</DisplayName>
+    <PublisherDisplayName>OpenScreen Contributors</PublisherDisplayName>
+    <Logo>assets\openscreen.png</Logo>
+    <Description>High-Performance Screen Recorder and Native Video Editor</Description>
+  </Properties>
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.22631.0" />
+  </Dependencies>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <DeviceCapability Name="microphone" />
+    <DeviceCapability Name="webcam" />
+  </Capabilities>
+  <Applications>
+    <Application Id="OpenScreen" Executable="openscreen.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="OpenScreen"
+                          Description="OpenScreen Screen Recorder"
+                          Square150x150Logo="assets\openscreen.png"
+                          Square44x44Logo="assets\openscreen.png"
+                          BackgroundColor="#0f172a">
+        <uap:DefaultTile ShortName="OpenScreen" />
+      </uap:VisualElements>
+      <Extensions>
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="openscreen">
+            <uap:DisplayName>OpenScreen Project</uap:DisplayName>
+            <uap:SupportedFileTypes>
+              <uap:FileType>.openscreen</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+</Package>

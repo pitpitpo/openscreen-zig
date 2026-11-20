@@ -14,6 +14,7 @@ pub const TimelineTrack = enum {
     cuts,
     annotations,
     blur,
+    off_menu,
     captions,
 };
 
@@ -82,13 +83,14 @@ pub const TimelineView = struct {
 
         var cur_y = rect.y + ruler_h + track_gap;
 
-        // 10 Full Timeline Tracks:
+        // 11 Full Timeline Tracks:
         const track_names = [_][]const u8{
-            "VIDEO", "AUDIO", "MUSIC", "ZOOMS", "LAYOUT", "SPEED", "CUTS", "ANNOT", "BLUR", "CAPTIONS",
+            "VIDEO", "AUDIO", "MUSIC", "ZOOMS", "LAYOUT", "SPEED", "CUTS", "ANNOT", "BLUR", "OFF_MENU", "CAPTIONS",
         };
         const track_ids = [_][]const u8{
             "trk_lbl_vid", "trk_lbl_aud", "trk_lbl_mus", "trk_lbl_zoom", "trk_lbl_lay",
-            "trk_lbl_spd", "trk_lbl_cut", "trk_lbl_ann", "trk_lbl_blur", "trk_lbl_cap",
+            "trk_lbl_spd", "trk_lbl_cut", "trk_lbl_ann", "trk_lbl_blur", "trk_lbl_offm",
+            "trk_lbl_cap",
         };
 
         for (track_names, 0..) |tname, i| {
@@ -168,7 +170,11 @@ pub const TimelineView = struct {
                     const blur_pill_w = @as(f32, @floatCast(total_duration * 0.3)) * self.pixels_per_sec;
                     try ctx.card("blur_track_pill", .{ .x = rect.x + 80.0 + 40.0, .y = cur_y + 1.0, .w = blur_pill_w, .h = track_h - 2.0 }, .{ .r = 90, .g = 90, .b = 100, .a = 255 });
                 },
-                9 => { // Captions
+                9 => { // Off-Menu Effects
+                    const offm_pill_w = @as(f32, @floatCast(total_duration * 0.25)) * self.pixels_per_sec;
+                    try ctx.card("offm_track_pill", .{ .x = rect.x + 80.0 + 80.0, .y = cur_y + 1.0, .w = offm_pill_w, .h = track_h - 2.0 }, ctx.theme.accent_blue);
+                },
+                10 => { // Captions
                     if (doc.transcripts.len > 0) {
                         for (doc.transcripts[0].words, 0..) |w, w_idx| {
                             const px_start = rect.x + 80.0 + @as(f32, @floatCast(w.startSec)) * self.pixels_per_sec;

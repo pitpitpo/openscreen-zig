@@ -142,6 +142,7 @@ fn linkOpenScreenLibs(
             "ffmpeg_shim.c",
             "whisper_shim.c",
             "onnx_shim.c",
+            "font_shim.c",
         },
         .flags = c_flags,
     });
@@ -428,4 +429,24 @@ pub fn build(b: *std.Build) void {
     const run_ui_tests = b.addRunArtifact(ui_tests);
     const ui_step = b.step("test-ui", "Run Gate 6 offscreen desktop GUI test suite");
     ui_step.dependOn(&run_ui_tests.step);
+
+    // Step: render-screenshots
+    const render_screenshots_mod = b.createModule(.{
+        .root_source_file = b.path("tools/render_screenshots.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    render_screenshots_mod.addImport("core", openscreen_core_mod);
+    render_screenshots_mod.addImport("compositor", openscreen_compositor_mod);
+    render_screenshots_mod.addImport("ffi", openscreen_ffi_mod);
+    render_screenshots_mod.addImport("media", openscreen_media_mod);
+    render_screenshots_mod.addImport("ui", openscreen_ui_mod);
+    const render_screenshots_exe = b.addExecutable(.{
+        .name = "render-screenshots",
+        .root_module = render_screenshots_mod,
+    });
+    linkOpenScreenLibs(b, render_screenshots_exe, wgpu_dep, target);
+    const run_render_screenshots = b.addRunArtifact(render_screenshots_exe);
+    const render_screenshots_step = b.step("render-screenshots", "Render visual proof PNG screenshots (HUD, Editor LTR, Editor RTL)");
+    render_screenshots_step.dependOn(&run_render_screenshots.step);
 }

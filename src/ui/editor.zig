@@ -362,14 +362,27 @@ pub const Editor = struct {
                 }
                 insp_y += 30.0;
 
-                // PiP Snap Corners
-                try ctx.label("insp_lbl_snap", "PiP Snap Position:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 140.0, .h = 14.0 }, ctx.theme.text_secondary);
+                // PiP Snap Positions (All 8 positions: 4 corners + 4 mid-edges)
+                try ctx.label("insp_lbl_snap", "PiP Snap Position (8 Pos):", .{ .x = insp_x + 12.0, .y = insp_y, .w = 180.0, .h = 14.0 }, ctx.theme.text_secondary);
                 insp_y += 18.0;
-                const snap_w: f32 = (right_col_w - 36.0) / 4.0;
-                if (try ctx.button("insp_snap_tl", "TL", .{ .x = insp_x + 12.0, .y = insp_y, .w = snap_w, .h = 20.0 })) {}
-                if (try ctx.button("insp_snap_tr", "TR", .{ .x = insp_x + 12.0 + snap_w + 4.0, .y = insp_y, .w = snap_w, .h = 20.0 })) {}
-                if (try ctx.button("insp_snap_bl", "BL", .{ .x = insp_x + 12.0 + (snap_w + 4.0) * 2.0, .y = insp_y, .w = snap_w, .h = 20.0 })) {}
-                if (try ctx.button("insp_snap_br", "BR", .{ .x = insp_x + 12.0 + (snap_w + 4.0) * 3.0, .y = insp_y, .w = snap_w, .h = 20.0 })) {}
+                const snap_w3: f32 = (right_col_w - 32.0) / 3.0;
+                const snap_w2: f32 = (right_col_w - 28.0) / 2.0;
+
+                // Row 1: Top-Left, Top-Center, Top-Right
+                if (try ctx.button("insp_snap_tl", "TL", .{ .x = insp_x + 12.0, .y = insp_y, .w = snap_w3, .h = 20.0 })) {}
+                if (try ctx.button("insp_snap_tc", "TC", .{ .x = insp_x + 16.0 + snap_w3, .y = insp_y, .w = snap_w3, .h = 20.0 })) {}
+                if (try ctx.button("insp_snap_tr", "TR", .{ .x = insp_x + 20.0 + snap_w3 * 2.0, .y = insp_y, .w = snap_w3, .h = 20.0 })) {}
+                insp_y += 24.0;
+
+                // Row 2: Left-Center, Right-Center
+                if (try ctx.button("insp_snap_lc", "LC (Left)", .{ .x = insp_x + 12.0, .y = insp_y, .w = snap_w2, .h = 20.0 })) {}
+                if (try ctx.button("insp_snap_rc", "RC (Right)", .{ .x = insp_x + 16.0 + snap_w2, .y = insp_y, .w = snap_w2, .h = 20.0 })) {}
+                insp_y += 24.0;
+
+                // Row 3: Bottom-Left, Bottom-Center, Bottom-Right
+                if (try ctx.button("insp_snap_bl", "BL", .{ .x = insp_x + 12.0, .y = insp_y, .w = snap_w3, .h = 20.0 })) {}
+                if (try ctx.button("insp_snap_bc", "BC", .{ .x = insp_x + 16.0 + snap_w3, .y = insp_y, .w = snap_w3, .h = 20.0 })) {}
+                if (try ctx.button("insp_snap_br", "BR", .{ .x = insp_x + 20.0 + snap_w3 * 2.0, .y = insp_y, .w = snap_w3, .h = 20.0 })) {}
                 insp_y += 28.0;
 
                 // ONNX AI Matting Modes
@@ -426,6 +439,19 @@ pub const Editor = struct {
                 const blur_w: f32 = (right_col_w - 32.0) / 2.0;
                 if (try ctx.button("insp_blur_gauss", "+ Gaussian Blur", .{ .x = insp_x + 12.0, .y = insp_y, .w = blur_w, .h = 22.0 })) {}
                 if (try ctx.button("insp_blur_mosaic", "+ Mosaic Pixel", .{ .x = insp_x + 16.0 + blur_w, .y = insp_y, .w = blur_w, .h = 22.0 })) {}
+                insp_y += 26.0;
+
+                // Freehand Polygon Blur
+                if (try ctx.button("insp_blur_poly", "+ Freehand Polygon Blur", .{ .x = insp_x + 12.0, .y = insp_y, .w = right_col_w - 24.0, .h = 22.0 })) {}
+                insp_y += 28.0;
+
+                // Off-Menu Effects & Flyouts
+                try ctx.label("insp_lbl_offmenu", "Off-Menu Effects & Flyouts:", .{ .x = insp_x + 12.0, .y = insp_y, .w = 200.0, .h = 14.0 }, ctx.theme.text_secondary);
+                insp_y += 18.0;
+                const offm_w: f32 = (right_col_w - 32.0) / 2.0;
+                if (try ctx.button("insp_offm_left", "Flyout Left", .{ .x = insp_x + 12.0, .y = insp_y, .w = offm_w, .h = 22.0 })) {}
+                if (try ctx.button("insp_offm_right", "Flyout Right", .{ .x = insp_x + 16.0 + offm_w, .y = insp_y, .w = offm_w, .h = 22.0 })) {}
+                insp_y += 28.0;
             },
             .ai_assistant => {
                 try ctx.label("insp_body_title_ai", "AI CONFIGURATION", .{ .x = insp_x + 12.0, .y = insp_y, .w = 200.0, .h = 18.0 }, ctx.theme.text_primary);

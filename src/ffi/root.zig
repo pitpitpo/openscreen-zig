@@ -5,3 +5,4 @@ pub const onnx = @import("onnx.zig");
 pub const capture = @import("capture_shim.zig");
 pub const shell = @import("shell_shim.zig");
 pub const sdl3 = @import("sdl3.zig");
+pub const font = @import("font_shim.zig");

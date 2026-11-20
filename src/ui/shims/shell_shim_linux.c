@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/Xatom.h>
 
 static int g_lock_fd = -1;
 static char g_lock_path[1024] = {0};
@@ -193,6 +194,35 @@ void* osc_window_create(const char* title, int width, int height, int resizable)
     return (void*)win;
 }
 
+void* osc_window_create_hud(const char* title, int width, int height) {
+    OscLinuxWindow* win = (OscLinuxWindow*)osc_window_create(title, width, height, 0);
+    if (!win || win->is_offscreen_dummy || !win->display) {
+        return (void*)win;
+    }
+
+    // Configure always-on-top and borderless
+    Display* display = win->display;
+    Window w = win->window;
+
+    Atom net_wm_state = XInternAtom(display, "_NET_WM_STATE", False);
+    Atom net_wm_state_above = XInternAtom(display, "_NET_WM_STATE_ABOVE", False);
+    Atom net_wm_window_type = XInternAtom(display, "_NET_WM_WINDOW_TYPE", False);
+    Atom net_wm_type_utility = XInternAtom(display, "_NET_WM_WINDOW_TYPE_UTILITY", False);
+
+    XChangeProperty(display, w, net_wm_state, XA_ATOM, 32, PropModeReplace, (unsigned char*)&net_wm_state_above, 1);
+    XChangeProperty(display, w, net_wm_window_type, XA_ATOM, 32, PropModeReplace, (unsigned char*)&net_wm_type_utility, 1);
+
+    const char* disable_cp = getenv("OPENSCREEN_DISABLE_CONTENT_PROTECTION");
+    if (disable_cp && strcmp(disable_cp, "1") == 0) {
+        fprintf(stderr, "[content-protection] OFF\n");
+    } else {
+        fprintf(stderr, "[content-protection] ON\n");
+    }
+
+    XFlush(display);
+    return (void*)win;
+}
+
 void osc_window_destroy(void* win_handle) {
     if (!win_handle) return;
     OscLinuxWindow* win = (OscLinuxWindow*)win_handle;
@@ -256,12 +286,32 @@ int osc_window_poll_event(void* win_handle, OscWindowEvent* out_event) {
                 out_event->y = xev.xmotion.y;
                 return 1;
             case ButtonPress:
+                if (xev.xbutton.button == 4) {
+                    out_event->kind = OSC_WINDOW_EVENT_MOUSE_WHEEL;
+                    out_event->wheel_dy = 1.0f;
+                    return 1;
+                } else if (xev.xbutton.button == 5) {
+                    out_event->kind = OSC_WINDOW_EVENT_MOUSE_WHEEL;
+                    out_event->wheel_dy = -1.0f;
+                    return 1;
+                } else if (xev.xbutton.button == 6) {
+                    out_event->kind = OSC_WINDOW_EVENT_MOUSE_WHEEL;
+                    out_event->wheel_dx = -1.0f;
+                    return 1;
+                } else if (xev.xbutton.button == 7) {
+                    out_event->kind = OSC_WINDOW_EVENT_MOUSE_WHEEL;
+                    out_event->wheel_dx = 1.0f;
+                    return 1;
+                }
                 out_event->kind = OSC_WINDOW_EVENT_MOUSE_DOWN;
                 out_event->x = xev.xbutton.x;
                 out_event->y = xev.xbutton.y;
                 out_event->button = (int)xev.xbutton.button;
                 return 1;
             case ButtonRelease:
+                if (xev.xbutton.button >= 4 && xev.xbutton.button <= 7) {
+                    return 0; // Wheel buttons don't generate mouse up
+                }
                 out_event->kind = OSC_WINDOW_EVENT_MOUSE_UP;
                 out_event->x = xev.xbutton.x;
                 out_event->y = xev.xbutton.y;
@@ -273,6 +323,12 @@ int osc_window_poll_event(void* win_handle, OscWindowEvent* out_event) {
                 out_event->keycode = (int)(sym & 0xFF);
                 if (xev.xkey.state & ControlMask) out_event->is_ctrl = 1;
                 if (xev.xkey.state & ShiftMask) out_event->is_shift = 1;
+
+                char text_buf[32] = {0};
+                int len = XLookupString(&xev.xkey, text_buf, sizeof(text_buf) - 1, NULL, NULL);
+                if (len > 0) {
+                    memcpy(out_event->text, text_buf, (size_t)len);
+                }
                 return 1;
             }
             case KeyRelease: {

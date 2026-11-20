@@ -39,15 +39,17 @@ int osc_shell_set_window_content_protection(void* native_window_handle, int excl
 
 /* Native Windowing & Event Loop */
 typedef enum {
-    OSC_WINDOW_EVENT_NONE       = 0,
-    OSC_WINDOW_EVENT_QUIT       = 1,
-    OSC_WINDOW_EVENT_CLOSE      = 2,
-    OSC_WINDOW_EVENT_RESIZE     = 3,
-    OSC_WINDOW_EVENT_MOUSE_MOVE = 4,
-    OSC_WINDOW_EVENT_MOUSE_DOWN = 5,
-    OSC_WINDOW_EVENT_MOUSE_UP   = 6,
-    OSC_WINDOW_EVENT_KEY_DOWN   = 7,
-    OSC_WINDOW_EVENT_KEY_UP     = 8
+    OSC_WINDOW_EVENT_NONE        = 0,
+    OSC_WINDOW_EVENT_QUIT        = 1,
+    OSC_WINDOW_EVENT_CLOSE       = 2,
+    OSC_WINDOW_EVENT_RESIZE      = 3,
+    OSC_WINDOW_EVENT_MOUSE_MOVE  = 4,
+    OSC_WINDOW_EVENT_MOUSE_DOWN  = 5,
+    OSC_WINDOW_EVENT_MOUSE_UP    = 6,
+    OSC_WINDOW_EVENT_KEY_DOWN    = 7,
+    OSC_WINDOW_EVENT_KEY_UP      = 8,
+    OSC_WINDOW_EVENT_TEXT_INPUT  = 9,
+    OSC_WINDOW_EVENT_MOUSE_WHEEL = 10
 } OscWindowEventKind;
 
 typedef struct {
@@ -60,9 +62,13 @@ typedef struct {
     int height;
     int is_ctrl;
     int is_shift;
+    float wheel_dx;
+    float wheel_dy;
+    char text[32]; /* UTF-8 text string */
 } OscWindowEvent;
 
 void* osc_window_create(const char* title, int width, int height, int resizable);
+void* osc_window_create_hud(const char* title, int width, int height);
 void osc_window_destroy(void* win_handle);
 int osc_window_poll_event(void* win_handle, OscWindowEvent* out_event);
 void osc_window_present(void* win_handle, const uint8_t* rgba_pixels, int width, int height);

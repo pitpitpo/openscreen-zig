@@ -191,18 +191,22 @@ pub const App = struct {
         }
 
         // Real Interactive OS Window Loop
-        const win = ffi.shell.windowCreate("OpenScreen 2.0", 1280, 800, true) orelse return 0;
-        defer ffi.shell.windowDestroy(win);
+        const win = if (self.show_editor)
+            ffi.shell.windowCreate("OpenScreen 2.0", 1280, 800, true)
+        else
+            ffi.shell.windowCreateHud("OpenScreen 2.0 (HUD)", 1280, 800) orelse ffi.shell.windowCreate("OpenScreen 2.0", 1280, 800, true);
+        const active_win = win orelse return 0;
+        defer ffi.shell.windowDestroy(active_win);
 
         var ctx = try dvui.Context.init(self.allocator, 1280, 800);
         defer ctx.deinit();
 
         var last_time_ns = getMonotonicNs();
 
-        while (self.is_running and ffi.shell.windowIsOpen(win)) {
+        while (self.is_running and ffi.shell.windowIsOpen(active_win)) {
             var ev: ffi.shell.WindowEvent = undefined;
             ctx.mouse_clicked = false;
-            while (ffi.shell.windowPollEvent(win, &ev)) {
+            while (ffi.shell.windowPollEvent(active_win, &ev)) {
                 switch (ev.kind) {
                     .quit, .close => {
                         self.is_running = false;
@@ -222,6 +226,15 @@ pub const App = struct {
                     .mouse_up => {
                         ctx.mouse_down = false;
                         ctx.mouse_clicked = true;
+                    },
+                    .mouse_wheel => {
+                        if (self.editor_app) |*ed| {
+                            if (ev.is_ctrl != 0) {
+                                ed.timeline.pixels_per_sec = std.math.clamp(ed.timeline.pixels_per_sec + ev.wheel_dy * 10.0, 20.0, 500.0);
+                            } else {
+                                ed.current_time_sec = @max(0.0, ed.current_time_sec - @as(f64, ev.wheel_dy) * 0.2);
+                            }
+                        }
                     },
                     .key_down => {
                         if (ev.is_ctrl != 0 and (ev.keycode == 'z' or ev.keycode == 'Z')) {
@@ -261,7 +274,7 @@ pub const App = struct {
             }
             ctx.endFrame(@intCast(@max(0, delta_ns)));
 
-            ffi.shell.windowPresent(win, ctx.fb.pixels, ctx.fb.width, ctx.fb.height);
+            ffi.shell.windowPresent(active_win, ctx.fb.pixels, ctx.fb.width, ctx.fb.height);
 
             sleepMs(16);
         }

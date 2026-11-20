@@ -1,0 +1,21 @@
+[Desktop Entry]
+Name=OpenScreen
+GenericName=Screen Recorder and Video Editor
+Comment=High-Performance Screen Recorder and Native Video Editor
+Exec=openscreen %F
+Icon=openscreen
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;Recorder;AudioVideoEditing;
+MimeType=application/x-openscreen;
+StartupNotify=true
+StartupWMClass=openscreen
+Actions=Record;Editor;
+
+[Desktop Action Record]
+Name=Start Recording
+Exec=openscreen record --project autosave.openscreen
+
+[Desktop Action Editor]
+Name=Open Editor
+Exec=openscreen

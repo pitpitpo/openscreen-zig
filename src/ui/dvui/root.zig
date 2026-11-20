@@ -73,6 +73,8 @@ pub const FrameBuffer = struct {
     width: u32,
     height: u32,
     pixels: []u8,
+    ttf_bytes: ?[]u8 = null,
+    ttf_font: ?ffi.font.TrueTypeFont = null,
 
     pub fn init(allocator: std.mem.Allocator, w: u32, h: u32) !FrameBuffer {
         const size = @as(usize, w) * h * 4;
@@ -83,11 +85,53 @@ pub const FrameBuffer = struct {
             .width = w,
             .height = h,
             .pixels = pixels,
+            .ttf_bytes = null,
+            .ttf_font = null,
         };
     }
 
+    pub fn setFont(self: *FrameBuffer, bytes: []u8) void {
+        if (self.ttf_font) |*f| {
+            f.deinit();
+            self.ttf_font = null;
+        }
+        if (self.ttf_bytes) |b| {
+            self.allocator.free(b);
+            self.ttf_bytes = null;
+        }
+        self.ttf_bytes = bytes;
+        self.ttf_font = ffi.font.TrueTypeFont.init(bytes);
+    }
+
     pub fn deinit(self: *FrameBuffer) void {
+        if (self.ttf_font) |*f| {
+            f.deinit();
+            self.ttf_font = null;
+        }
+        if (self.ttf_bytes) |b| {
+            self.allocator.free(b);
+            self.ttf_bytes = null;
+        }
         self.allocator.free(self.pixels);
+    }
+
+    pub fn blendPixel(self: *FrameBuffer, px: i32, py: i32, c: Color, alpha: u8) void {
+        if (px < 0 or py < 0 or px >= @as(i32, @intCast(self.width)) or py >= @as(i32, @intCast(self.height))) return;
+        if (alpha == 0) return;
+        const idx = (@as(usize, @intCast(py)) * self.width + @as(usize, @intCast(px))) * 4;
+        if (alpha == 255) {
+            self.pixels[idx + 0] = c.r;
+            self.pixels[idx + 1] = c.g;
+            self.pixels[idx + 2] = c.b;
+            self.pixels[idx + 3] = c.a;
+            return;
+        }
+        const a_f = @as(u32, alpha);
+        const inv_a = 255 - a_f;
+        self.pixels[idx + 0] = @intCast((@as(u32, c.r) * a_f + @as(u32, self.pixels[idx + 0]) * inv_a) / 255);
+        self.pixels[idx + 1] = @intCast((@as(u32, c.g) * a_f + @as(u32, self.pixels[idx + 1]) * inv_a) / 255);
+        self.pixels[idx + 2] = @intCast((@as(u32, c.b) * a_f + @as(u32, self.pixels[idx + 2]) * inv_a) / 255);
+        self.pixels[idx + 3] = @max(self.pixels[idx + 3], alpha);
     }
 
     pub fn resize(self: *FrameBuffer, new_w: u32, new_h: u32) !void {
@@ -157,7 +201,7 @@ pub const FrameBuffer = struct {
         self.drawGlyph(@as(u21, char), x, y, scale, c);
     }
 
-    pub fn drawGlyph(self: *FrameBuffer, cp: u21, x: i32, y: i32, scale: i32, c: Color) void {
+    pub fn drawBitmapGlyph(self: *FrameBuffer, cp: u21, x: i32, y: i32, scale: i32, c: Color) void {
         const glyph_data = getGlyphPattern(cp);
         var row: usize = 0;
         while (row < 8) : (row += 1) {
@@ -173,6 +217,28 @@ pub const FrameBuffer = struct {
                 }
             }
         }
+    }
+
+    pub fn drawGlyph(self: *FrameBuffer, cp: u21, x: i32, y: i32, scale: i32, c: Color) void {
+        if (self.ttf_font) |*font| {
+            var glyph_bmp = font.renderGlyph(@as(u32, cp), @as(f32, @floatFromInt(scale * 10)));
+            if (glyph_bmp) |*bmp| {
+                defer bmp.deinit();
+                var r: usize = 0;
+                while (r < bmp.height) : (r += 1) {
+                    var col: usize = 0;
+                    while (col < bmp.width) : (col += 1) {
+                        const alpha = bmp.pixels[r * bmp.width + col];
+                        if (alpha > 0) {
+                            self.blendPixel(x + bmp.xoff + @as(i32, @intCast(col)), y + 8 * scale + bmp.yoff + @as(i32, @intCast(r)), c, alpha);
+                        }
+                    }
+                }
+                return;
+            }
+        }
+
+        self.drawBitmapGlyph(cp, x, y, scale, c);
     }
 
     pub fn drawText(self: *FrameBuffer, text: []const u8, x: f32, y: f32, scale: i32, c: Color, is_rtl: bool) void {
@@ -194,11 +260,11 @@ pub const FrameBuffer = struct {
                 start_x += @intCast(text.len * @as(usize, @intCast(char_w)));
                 for (text) |ch| {
                     start_x -= char_w;
-                    self.drawGlyph(@as(u21, ch), start_x, py, scale, c);
+                    self.drawBitmapGlyph(@as(u21, ch), start_x, py, scale, c);
                 }
             } else {
                 for (text) |ch| {
-                    self.drawGlyph(@as(u21, ch), start_x, py, scale, c);
+                    self.drawBitmapGlyph(@as(u21, ch), start_x, py, scale, c);
                     start_x += char_w;
                 }
             }
@@ -456,6 +522,29 @@ pub fn getGlyphPattern(cp: u21) [8]u8 {
     };
 }
 
+extern "c" fn fseek(stream: *std.c.FILE, offset: c_long, whence: c_int) c_int;
+extern "c" fn ftell(stream: *std.c.FILE) c_long;
+
+fn loadFontFile(allocator: std.mem.Allocator, path: []const u8) ?[]u8 {
+    var path_z: [1024]u8 = undefined;
+    if (path.len >= path_z.len) return null;
+    @memcpy(path_z[0..path.len], path);
+    path_z[path.len] = 0;
+
+    const f = std.c.fopen(@ptrCast(&path_z), "rb") orelse return null;
+    defer _ = std.c.fclose(f);
+
+    _ = fseek(f, 0, 2);
+    const sz = ftell(f);
+    _ = fseek(f, 0, 0);
+    if (sz <= 0 or sz > 10 * 1024 * 1024) return null;
+
+    const size: usize = @intCast(sz);
+    const buf = allocator.alloc(u8, size) catch return null;
+    _ = std.c.fread(buf.ptr, 1, size, f);
+    return buf;
+}
+
 pub const Context = struct {
     allocator: std.mem.Allocator,
     fb: FrameBuffer,
@@ -468,7 +557,11 @@ pub const Context = struct {
     tracked_widgets: std.ArrayList(TrackedWidget),
 
     pub fn init(allocator: std.mem.Allocator, w: u32, h: u32) !Context {
-        const fb = try FrameBuffer.init(allocator, w, h);
+        var fb = try FrameBuffer.init(allocator, w, h);
+        if (loadFontFile(allocator, "assets/fonts/Inter-Regular.ttf")) |bytes| {
+            fb.setFont(bytes);
+        }
+
         return .{
             .allocator = allocator,
             .fb = fb,

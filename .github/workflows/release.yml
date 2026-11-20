@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build & Package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            artifact-name: linux-x86_64
+          - os: windows-latest
+            artifact-name: windows-x64
+          - os: macos-latest
+            artifact-name: macos-universal
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig 0.17.1
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.1
+
+      - name: Linux Dependencies & Packaging
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mesa-vulkan-drivers libvulkan-dev ffmpeg libasound2-dev libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libfreetype-dev libharfbuzz-dev libx11-dev libxext-dev libxfixes-dev libxi-dev libpipewire-0.3-dev libdbus-1-dev
+          zig build -Doptimize=ReleaseFast
+          mkdir -p dist
+          chmod +x packaging/linux/build_deb.sh
+          ./packaging/linux/build_deb.sh
+          tar -czf dist/openscreen-linux-x86_64.tar.gz -C zig-out/bin openscreen
+          cd dist
+          sha256sum * > SHA256SUMS-linux.txt
+
+      - name: Windows Setup & Packaging
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl-shared.zip" -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg_extracted"
+          $ffmpegDir = Get-ChildItem -Path "ffmpeg_extracted" -Directory | Select-Object -First 1
+          New-Item -ItemType Directory -Force -Path "lib"
+          New-Item -ItemType Directory -Force -Path "include"
+          Copy-Item "$($ffmpegDir.FullName)\lib\*.lib" -Destination "lib\" -Force
+          Copy-Item "$($ffmpegDir.FullName)\include\*" -Destination "include\" -Recurse -Force
+          Copy-Item "$($ffmpegDir.FullName)\bin\*.dll" -Destination "." -Force
+          zig build -Doptimize=ReleaseFast
+          & ./packaging/windows/package_portable.ps1 -DistDir "dist" -Version "${{ github.ref_name }}"
+          cd dist
+          Get-FileHash -Algorithm SHA256 (Get-ChildItem -File) | ForEach-Object { "$($_.Hash.ToLower())  $($_.Path | Split-Path -Leaf)" } | Out-File -FilePath SHA256SUMS-windows.txt -Encoding ascii
+
+      - name: macOS Dependencies & Packaging
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install ffmpeg
+          zig build -Doptimize=ReleaseFast
+          chmod +x packaging/macos/build_app_dmg.sh
+          ./packaging/macos/build_app_dmg.sh
+          cd dist
+          shasum -a 256 * > SHA256SUMS-macos.txt
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.artifact-name }}
+          path: dist/*
+
+  publish-release:
+    name: Draft GitHub Release
+    needs: build-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Aggregate SHA256SUMS
+        run: |
+          cd release-assets
+          cat SHA256SUMS-*.txt > SHA256SUMS.txt
+          rm -f SHA256SUMS-*.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: release-assets/*
+          generate_release_notes: true

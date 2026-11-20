@@ -216,6 +216,51 @@ void* osc_window_create(const char* title, int width, int height, int resizable)
     return (void*)win;
 }
 
+void* osc_window_create_hud(const char* title, int width, int height) {
+    OscMacWindow* win = (OscMacWindow*)calloc(1, sizeof(OscMacWindow));
+    if (!win) return NULL;
+
+    win->width = width > 0 ? width : 780;
+    win->height = height > 0 ? height : 48;
+    win->is_open = 1;
+
+    @autoreleasepool {
+        if (![NSApp isRunning]) {
+            [NSApplication sharedApplication];
+            [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+        }
+
+        NSRect frame = NSMakeRect(200, 40, win->width, win->height);
+        NSWindowStyleMask style = NSWindowStyleMaskBorderless;
+        NSWindow* window = [[NSWindow alloc] initWithContentRect:frame styleMask:style backing:NSBackingStoreBuffered defer:NO];
+        if (!window) {
+            win->is_offscreen_dummy = 1;
+            return (void*)win;
+        }
+
+        [window setLevel:NSFloatingWindowLevel];
+        [window setOpaque:NO];
+        [window setBackgroundColor:[NSColor clearColor]];
+
+        const char* disable_cp = getenv("OPENSCREEN_DISABLE_CONTENT_PROTECTION");
+        if (disable_cp && strcmp(disable_cp, "1") == 0) {
+            fprintf(stderr, "[content-protection] OFF\n");
+        } else {
+            if ([window respondsToSelector:@selector(setSharingType:)]) {
+                [window setSharingType:NSWindowSharingNone];
+            }
+            fprintf(stderr, "[content-protection] ON\n");
+        }
+
+        if (title) {
+            [window setTitle:[NSString stringWithUTF8String:title]];
+        }
+        [window makeKeyAndOrderFront:nil];
+        win->ns_window = (__bridge_retained void*)window;
+    }
+    return (void*)win;
+}
+
 void osc_window_destroy(void* win_handle) {
     if (!win_handle) return;
     OscMacWindow* win = (OscMacWindow*)win_handle;
@@ -261,6 +306,12 @@ int osc_window_poll_event(void* win_handle, OscWindowEvent* out_event) {
                     out_event->button = 1;
                     [NSApp sendEvent:event];
                     return 1;
+                case NSEventTypeScrollWheel:
+                    out_event->kind = OSC_WINDOW_EVENT_MOUSE_WHEEL;
+                    out_event->wheel_dx = (float)[event scrollingDeltaX];
+                    out_event->wheel_dy = (float)[event scrollingDeltaY];
+                    [NSApp sendEvent:event];
+                    return 1;
                 case NSEventTypeKeyDown: {
                     out_event->kind = OSC_WINDOW_EVENT_KEY_DOWN;
                     NSString* chars = [event charactersIgnoringModifiers];
@@ -268,6 +319,14 @@ int osc_window_poll_event(void* win_handle, OscWindowEvent* out_event) {
                     NSEventModifierFlags flags = [event modifierFlags];
                     if (flags & NSEventModifierFlagCommand) out_event->is_ctrl = 1;
                     if (flags & NSEventModifierFlagShift) out_event->is_shift = 1;
+
+                    NSString* raw_chars = [event characters];
+                    if ([raw_chars length] > 0) {
+                        const char* utf8 = [raw_chars UTF8String];
+                        if (utf8) {
+                            strncpy(out_event->text, utf8, sizeof(out_event->text) - 1);
+                        }
+                    }
                     [NSApp sendEvent:event];
                     return 1;
                 }

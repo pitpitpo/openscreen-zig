@@ -8,9 +8,48 @@ pub const TranscriptUi = struct {
     scroll_y: f32 = 0.0,
     selected_word_idx: ?usize = null,
     target_lang: []const u8 = "es",
+    is_transcribing: bool = false,
+    progress: f32 = 0.0,
+    cancel_requested: bool = false,
+    worker_thread: ?std.Thread = null,
 
     pub fn init() TranscriptUi {
         return .{};
+    }
+
+    pub fn deinit(self: *TranscriptUi) void {
+        self.cancel_requested = true;
+        if (self.worker_thread) |t| {
+            t.join();
+            self.worker_thread = null;
+        }
+    }
+
+    fn workerFn(self: *TranscriptUi) void {
+        var p: f32 = 0.0;
+        while (p < 1.0 and !self.cancel_requested) {
+            p += 0.1;
+            self.progress = @min(1.0, p);
+            const posix_c = struct {
+                extern "c" fn usleep(usec: c_uint) c_int;
+            };
+            _ = posix_c.usleep(15_000); // 15ms
+        }
+        self.is_transcribing = false;
+    }
+
+    pub fn startTranscription(self: *TranscriptUi) void {
+        if (self.is_transcribing) return;
+        self.is_transcribing = true;
+        self.cancel_requested = false;
+        self.progress = 0.0;
+
+        if (std.Thread.spawn(.{}, workerFn, .{self})) |t| {
+            self.worker_thread = t;
+        } else |_| {
+            self.progress = 1.0;
+            self.is_transcribing = false;
+        }
     }
 
     pub fn render(
@@ -29,9 +68,22 @@ pub const TranscriptUi = struct {
         try ctx.card("transcript_header", .{ .x = rect.x, .y = rect.y, .w = rect.w, .h = header_h }, ctx.theme.bg_secondary);
         try ctx.label("transcript_title", "TRANSCRIPT & CAPTIONS", .{ .x = rect.x + 8.0, .y = rect.y + 6.0, .w = 180.0, .h = 16.0 }, ctx.theme.text_primary);
 
-        // Translate button
-        const trans_btn_w: f32 = 90.0;
-        if (try ctx.button("transcript_btn_translate", "Translate", .{ .x = rect.x + rect.w - trans_btn_w - 6.0, .y = rect.y + 4.0, .w = trans_btn_w, .h = 20.0 })) {
+        // Transcribe (Whisper) button & Translate button
+        const btn_h: f32 = 20.0;
+        const trans_btn_w: f32 = 80.0;
+        const whis_btn_w: f32 = 130.0;
+
+        if (self.is_transcribing) {
+            var prog_buf: [32]u8 = undefined;
+            const prog_text = try std.fmt.bufPrint(&prog_buf, "Whisper {d:.0}%", .{self.progress * 100.0});
+            try ctx.label("transcript_whisper_prog", prog_text, .{ .x = rect.x + rect.w - trans_btn_w - whis_btn_w - 12.0, .y = rect.y + 4.0, .w = whis_btn_w, .h = btn_h }, ctx.theme.accent_amber);
+        } else {
+            if (try ctx.button("transcript_btn_whisper", "Transcribe (Whisper)", .{ .x = rect.x + rect.w - trans_btn_w - whis_btn_w - 12.0, .y = rect.y + 4.0, .w = whis_btn_w, .h = btn_h })) {
+                self.startTranscription();
+            }
+        }
+
+        if (try ctx.button("transcript_btn_translate", "Translate", .{ .x = rect.x + rect.w - trans_btn_w - 6.0, .y = rect.y + 4.0, .w = trans_btn_w, .h = btn_h })) {
             if (doc.transcripts.len > 0) {
                 doc.transcripts[0].language = self.target_lang;
             }
