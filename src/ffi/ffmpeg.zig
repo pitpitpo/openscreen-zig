@@ -316,3 +316,17 @@ pub const GifMuxer = struct {
         _ = osc_gif_muxer_close(self.handle);
     }
 };
+
+pub extern "c" fn osc_encode_png(rgba: [*]const u8, width: c_int, height: c_int, out_data: *?[*]u8, out_size: *usize) c_int;
+pub extern "c" fn osc_free_png(data: ?[*]u8) void;
+
+pub fn encodePng(allocator: std.mem.Allocator, rgba: []const u8, width: u32, height: u32) ![]u8 {
+    var out_ptr: ?[*]u8 = null;
+    var out_size: usize = 0;
+    const rc = osc_encode_png(rgba.ptr, @intCast(width), @intCast(height), &out_ptr, &out_size);
+    if (rc != 0 or out_ptr == null) return error.PngEncodingFailed;
+    defer osc_free_png(out_ptr);
+
+    const slice = out_ptr.?[0..out_size];
+    return try allocator.dupe(u8, slice);
+}

@@ -1182,3 +1182,75 @@ int osc_gif_muxer_close(OscGifMuxer *g) {
     free(g);
     return 0;
 }
+
+int osc_encode_png(const uint8_t *rgba, int width, int height, uint8_t **out_data, size_t *out_size) {
+    if (!rgba || width <= 0 || height <= 0 || !out_data || !out_size) return -1;
+    *out_data = NULL;
+    *out_size = 0;
+
+    const AVCodec *codec = avcodec_find_encoder(AV_CODEC_ID_PNG);
+    if (!codec) return -1;
+
+    AVCodecContext *ctx = avcodec_alloc_context3(codec);
+    if (!ctx) return -1;
+
+    ctx->width = width;
+    ctx->height = height;
+    ctx->pix_fmt = AV_PIX_FMT_RGBA;
+    ctx->time_base = (AVRational){ 1, 25 };
+
+    int prev_level = av_log_get_level();
+    av_log_set_level(AV_LOG_QUIET);
+    int ret = avcodec_open2(ctx, codec, NULL);
+    av_log_set_level(prev_level);
+    if (ret < 0) {
+        avcodec_free_context(&ctx);
+        return -1;
+    }
+
+    AVFrame *frame = av_frame_alloc();
+    if (!frame) {
+        avcodec_free_context(&ctx);
+        return -1;
+    }
+
+    frame->format = AV_PIX_FMT_RGBA;
+    frame->width = width;
+    frame->height = height;
+    if (av_image_alloc(frame->data, frame->linesize, width, height, AV_PIX_FMT_RGBA, 1) < 0) {
+        av_frame_free(&frame);
+        avcodec_free_context(&ctx);
+        return -1;
+    }
+
+    for (int y = 0; y < height; y++) {
+        memcpy(frame->data[0] + y * frame->linesize[0], rgba + y * width * 4, width * 4);
+    }
+
+    AVPacket *pkt = av_packet_alloc();
+    ret = avcodec_send_frame(ctx, frame);
+    if (ret >= 0) {
+        ret = avcodec_receive_packet(ctx, pkt);
+        if (ret >= 0 && pkt->size > 0) {
+            uint8_t *buf = (uint8_t *)malloc(pkt->size);
+            if (buf) {
+                memcpy(buf, pkt->data, pkt->size);
+                *out_data = buf;
+                *out_size = (size_t)pkt->size;
+                ret = 0;
+            } else {
+                ret = -1;
+            }
+        }
+    }
+
+    av_packet_free(&pkt);
+    av_freep(&frame->data[0]);
+    av_frame_free(&frame);
+    avcodec_free_context(&ctx);
+    return ret;
+}
+
+void osc_free_png(uint8_t *data) {
+    if (data) free(data);
+}

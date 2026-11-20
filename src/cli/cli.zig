@@ -345,15 +345,32 @@ pub const Cli = struct {
 
         defer {
             if (doc.zoomRanges.ptr != parsed.value.zoomRanges.ptr and doc.zoomRanges.len > 0) {
+                for (doc.zoomRanges) |zr| {
+                    self.allocator.free(zr.id);
+                    self.allocator.free(zr.clipId);
+                }
                 self.allocator.free(doc.zoomRanges);
             }
             if (doc.timeline.trimRanges.ptr != parsed.value.timeline.trimRanges.ptr and doc.timeline.trimRanges.len > 0) {
+                for (doc.timeline.trimRanges) |tr| {
+                    self.allocator.free(tr.id);
+                    self.allocator.free(tr.clipId);
+                }
                 self.allocator.free(doc.timeline.trimRanges);
             }
             if (doc.timeline.speedRanges.ptr != parsed.value.timeline.speedRanges.ptr and doc.timeline.speedRanges.len > 0) {
+                for (doc.timeline.speedRanges) |sr| {
+                    self.allocator.free(sr.id);
+                    self.allocator.free(sr.clipId);
+                }
                 self.allocator.free(doc.timeline.speedRanges);
             }
             if (doc.annotations.ptr != parsed.value.annotations.ptr and doc.annotations.len > 0) {
+                for (doc.annotations) |an| {
+                    self.allocator.free(an.id);
+                    self.allocator.free(an.clipId);
+                    self.allocator.free(an.content);
+                }
                 self.allocator.free(doc.annotations);
             }
         }
@@ -366,8 +383,8 @@ pub const Cli = struct {
         while (i < args.len) : (i += 1) {
             if (std.mem.eql(u8, args[i], "--add-zoom") and i + 1 < args.len) {
                 const z = project.ZoomRange{
-                    .id = "cli_zoom",
-                    .clipId = "clip-1",
+                    .id = try self.allocator.dupe(u8, "cli_zoom"),
+                    .clipId = try self.allocator.dupe(u8, "clip-1"),
                     .startSec = 1.0,
                     .endSec = 3.0,
                     .depth = 2,
@@ -378,8 +395,8 @@ pub const Cli = struct {
                 i += 1;
             } else if (std.mem.eql(u8, args[i], "--cut") and i + 1 < args.len) {
                 const tr = project.TrimRange{
-                    .id = "cli_cut",
-                    .clipId = "clip-1",
+                    .id = try self.allocator.dupe(u8, "cli_cut"),
+                    .clipId = try self.allocator.dupe(u8, "clip-1"),
                     .startSec = 0.5,
                     .endSec = 1.5,
                 };

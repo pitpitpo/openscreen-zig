@@ -58,6 +58,10 @@ int osc_gif_muxer_open(const char *filename, int width, int height, int fps_num,
 int osc_gif_muxer_write_frame(OscGifMuxer *g, const uint8_t *rgba, int64_t pts_frame);
 int osc_gif_muxer_close(OscGifMuxer *g);
 
+/* Image encoding */
+int osc_encode_png(const uint8_t *rgba, int width, int height, uint8_t **out_data, size_t *out_size);
+void osc_free_png(uint8_t *data);
+
 #ifdef __cplusplus
 }
 #endif

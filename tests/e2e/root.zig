@@ -23,6 +23,7 @@ fn sleepMs(ms: u32) void {
 
 extern "c" fn fseek(stream: *std.c.FILE, offset: c_long, whence: c_int) c_int;
 extern "c" fn ftell(stream: *std.c.FILE) c_long;
+extern "c" fn remove(pathname: [*:0]const u8) c_int;
 
 const MockFrameGenerator = struct {
     width: u32,
@@ -599,7 +600,62 @@ test "Gate 5: Headless CLI and MCP Stdio Child Process Integration" {
     try std.testing.expect(std.mem.indexOf(u8, src_res.stdout, "\"event\":\"done\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, src_res.stdout, "\"sources\":") != null);
 
-    // 3. openscreen mcp (JSON-RPC 2.0 stdio server)
+    // 3. openscreen edit --json
+    const test_proj = if (builtin.os.tag == .windows) "test_cli.openscreen" else "/tmp/test_cli.openscreen";
+    defer {
+        var p_z: [1024]u8 = undefined;
+        @memcpy(p_z[0..test_proj.len], test_proj);
+        p_z[test_proj.len] = 0;
+        _ = remove(@ptrCast(&p_z));
+    }
+    {
+        var init_doc = try core.project.create_empty_document(allocator, "E2E CLI Project");
+        const json_data = try core.project.save_to_json(allocator, &init_doc);
+        defer allocator.free(json_data);
+        init_doc.deinit(allocator);
+
+        var p_z: [1024]u8 = undefined;
+        @memcpy(p_z[0..test_proj.len], test_proj);
+        p_z[test_proj.len] = 0;
+        const f = std.c.fopen(@ptrCast(&p_z), "wb") orelse return error.CannotCreateFile;
+        _ = std.c.fwrite(json_data.ptr, 1, json_data.len, f);
+        _ = std.c.fclose(f);
+    }
+
+    const edit_res = try std.process.run(allocator, io, .{
+        .argv = &.{ exe_path, "edit", test_proj, "--add-zoom", "1.0", "3.0", "--cut", "0.5", "1.5", "--aspect", "16:9", "--json" },
+    });
+    defer {
+        allocator.free(edit_res.stdout);
+        allocator.free(edit_res.stderr);
+    }
+    try std.testing.expectEqual(@as(u8, 0), edit_res.term.exited);
+    try std.testing.expect(std.mem.indexOf(u8, edit_res.stdout, "\"event\":\"done\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, edit_res.stdout, "\"operations\":3") != null);
+
+    // 4. openscreen export --json
+    const test_export = if (builtin.os.tag == .windows) "test_cli_export.mp4" else "/tmp/test_cli_export.mp4";
+    var exp_z: [1024]u8 = undefined;
+    @memcpy(exp_z[0..test_export.len], test_export);
+    exp_z[test_export.len] = 0;
+    defer _ = remove(@ptrCast(&exp_z));
+
+    const export_res = try std.process.run(allocator, io, .{
+        .argv = &.{ exe_path, "export", test_proj, "-o", test_export, "--fps", "30", "--json" },
+    });
+    defer {
+        allocator.free(export_res.stdout);
+        allocator.free(export_res.stderr);
+    }
+    try std.testing.expectEqual(@as(u8, 0), export_res.term.exited);
+    try std.testing.expect(std.mem.indexOf(u8, export_res.stdout, "\"event\":\"done\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, export_res.stdout, "\"outputPath\"") != null);
+
+    const exp_f = std.c.fopen(@ptrCast(&exp_z), "rb");
+    try std.testing.expect(exp_f != null);
+    _ = std.c.fclose(exp_f.?);
+
+    // 5. openscreen mcp (JSON-RPC 2.0 stdio server)
     var child = try std.process.spawn(io, .{
         .argv = &.{ exe_path, "mcp" },
         .stdin = .pipe,
@@ -629,27 +685,75 @@ test "Gate 5: Headless CLI and MCP Stdio Child Process Integration" {
         }
     }.read;
 
-    // 3a. Send initialize
+    // 5a. initialize
     const init_req = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n";
     try child.stdin.?.writeStreamingAll(io, init_req);
-
-    var init_buf: [4096]u8 = undefined;
-    const init_resp = try readResponseLine(&child.stdout.?, io, &init_buf);
+    var buf_4k: [4096]u8 = undefined;
+    const init_resp = try readResponseLine(&child.stdout.?, io, &buf_4k);
     try std.testing.expect(init_resp.len > 0);
     try std.testing.expect(std.mem.indexOf(u8, init_resp, "\"name\":\"openscreen\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, init_resp, "\"protocolVersion\":\"2024-11-05\"") != null);
 
-    // 3b. Send tools/call extract_frame
-    const frame_req = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"extract_frame\",\"arguments\":{\"timeSec\":0.5,\"width\":64,\"height\":36}}}\n";
+    // 5b. inspect_project
+    const insp_req = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"inspect_project\",\"arguments\":{\"projectPath\":\"test_cli.openscreen\"}}}\n";
+    try child.stdin.?.writeStreamingAll(io, insp_req);
+    const insp_resp = try readResponseLine(&child.stdout.?, io, &buf_4k);
+    try std.testing.expect(insp_resp.len > 0);
+    try std.testing.expect(std.mem.indexOf(u8, insp_resp, "Project:") != null);
+
+    // 5c. add_zoom
+    const zoom_req = "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"add_zoom\",\"arguments\":{\"startSec\":1.0,\"endSec\":3.0,\"cx\":0.5,\"cy\":0.5,\"depth\":2}}}\n";
+    try child.stdin.?.writeStreamingAll(io, zoom_req);
+    const zoom_resp = try readResponseLine(&child.stdout.?, io, &buf_4k);
+    try std.testing.expect(zoom_resp.len > 0);
+    try std.testing.expect(std.mem.indexOf(u8, zoom_resp, "Zoom added") != null);
+
+    // 5d. add_cut
+    const cut_req = "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"add_cut\",\"arguments\":{\"startSec\":0.5,\"endSec\":1.5}}}\n";
+    try child.stdin.?.writeStreamingAll(io, cut_req);
+    const cut_resp = try readResponseLine(&child.stdout.?, io, &buf_4k);
+    try std.testing.expect(cut_resp.len > 0);
+    try std.testing.expect(std.mem.indexOf(u8, cut_resp, "Cut added") != null);
+
+    // 5e. undo
+    const undo_req = "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"undo\",\"arguments\":{}}}\n";
+    try child.stdin.?.writeStreamingAll(io, undo_req);
+    const undo_resp = try readResponseLine(&child.stdout.?, io, &buf_4k);
+    try std.testing.expect(undo_resp.len > 0);
+    try std.testing.expect(std.mem.indexOf(u8, undo_resp, "Undo: success") != null);
+
+    // 5f. redo
+    const redo_req = "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"redo\",\"arguments\":{}}}\n";
+    try child.stdin.?.writeStreamingAll(io, redo_req);
+    const redo_resp = try readResponseLine(&child.stdout.?, io, &buf_4k);
+    try std.testing.expect(redo_resp.len > 0);
+    try std.testing.expect(std.mem.indexOf(u8, redo_resp, "Redo: success") != null);
+
+    // 5g. export_video
+    const mcp_out = if (builtin.os.tag == .windows) "test_mcp_e2e.mp4" else "/tmp/test_mcp_e2e.mp4";
+    var mcp_out_z: [1024]u8 = undefined;
+    @memcpy(mcp_out_z[0..mcp_out.len], mcp_out);
+    mcp_out_z[mcp_out.len] = 0;
+    defer _ = remove(@ptrCast(&mcp_out_z));
+
+    var exp_cmd_buf: [512]u8 = undefined;
+    const exp_req = try std.fmt.bufPrint(&exp_cmd_buf, "{{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{{\"name\":\"export_video\",\"arguments\":{{\"outputPath\":\"{s}\",\"fps\":30}}}}}}\n", .{mcp_out});
+    try child.stdin.?.writeStreamingAll(io, exp_req);
+    const exp_resp = try readResponseLine(&child.stdout.?, io, &buf_4k);
+    try std.testing.expect(exp_resp.len > 0);
+    try std.testing.expect(std.mem.indexOf(u8, exp_resp, "Exported successfully") != null);
+
+    // 5h. extract_frame (valid base64 PNG)
+    const frame_req = "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"extract_frame\",\"arguments\":{\"timeSec\":0.5,\"width\":64,\"height\":36}}}\n";
     try child.stdin.?.writeStreamingAll(io, frame_req);
 
     var frame_buf: [16384]u8 = undefined;
     const frame_resp = try readResponseLine(&child.stdout.?, io, &frame_buf);
     try std.testing.expect(frame_resp.len > 0);
-    try std.testing.expect(std.mem.indexOf(u8, frame_resp, "image/ppm") != null);
-    try std.testing.expect(std.mem.indexOf(u8, frame_resp, "data") != null);
+    try std.testing.expect(std.mem.indexOf(u8, frame_resp, "\"mimeType\":\"image/png\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, frame_resp, "\"data\":\"iVBORw0K") != null);
 
-    // 3c. Close stdin to initiate graceful shutdown and drain remaining output
+    // 5i. Close stdin to initiate graceful shutdown and drain remaining output
     child.stdin.?.close(io);
     child.stdin = null;
 

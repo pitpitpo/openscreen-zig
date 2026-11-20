@@ -239,7 +239,7 @@ pub const McpServer = struct {
             \\{{"name":"undo","description":"Undo last edit operation on project","inputSchema":{{"type":"object","properties":{{"projectPath":{{"type":"string"}}}}}}}},
             \\{{"name":"redo","description":"Redo last undone edit operation on project","inputSchema":{{"type":"object","properties":{{"projectPath":{{"type":"string"}}}}}}}},
             \\{{"name":"export_video","description":"Export project timeline to MP4 or GIF","inputSchema":{{"type":"object","properties":{{"projectPath":{{"type":"string"}},"outputPath":{{"type":"string"}},"fps":{{"type":"integer"}}}}}}}},
-            \\{{"name":"extract_frame","description":"Render video frame at timestamp t and return PNG/PPM base64 for AI visual inspection","inputSchema":{{"type":"object","properties":{{"projectPath":{{"type":"string"}},"timeSec":{{"type":"number"}},"width":{{"type":"integer"}},"height":{{"type":"integer"}}}}}}}}
+            \\{{"name":"extract_frame","description":"Render video frame at timestamp t and return PNG base64 for AI visual inspection","inputSchema":{{"type":"object","properties":{{"projectPath":{{"type":"string"}},"timeSec":{{"type":"number"}},"width":{{"type":"integer"}},"height":{{"type":"integer"}}}}}}}}
             \\]}}}}
         ,
             .{id_str},
@@ -358,6 +358,22 @@ pub const McpServer = struct {
             ,
                 .{id_str},
             );
+        } else if (std.mem.eql(u8, tool_name, "redo")) {
+            if (self.doc) |*d| {
+                const redone = try self.stack.redo(d);
+                return try std.fmt.allocPrint(
+                    self.allocator,
+                    \\{{"jsonrpc":"2.0","id":{s},"result":{{"content":[{{"type":"text","text":"Redo: {s}"}}]}}}}
+                ,
+                    .{ id_str, if (redone) "success" else "stack empty" },
+                );
+            }
+            return try std.fmt.allocPrint(
+                self.allocator,
+                \\{{"jsonrpc":"2.0","id":{s},"result":{{"content":[{{"type":"text","text":"Redo: stack empty"}}]}}}}
+            ,
+                .{id_str},
+            );
         } else if (std.mem.eql(u8, tool_name, "export_video")) {
             const default_out = if (builtin.os.tag == .windows) "mcp_export.mp4" else "/tmp/mcp_export.mp4";
             const out_path = self.getArgString(args_val, "outputPath") orelse default_out;
@@ -436,35 +452,19 @@ pub const McpServer = struct {
 
             const rgba = try comp.render(&fg);
 
-            // Write P6 PPM header and bytes
-            const header = try std.fmt.allocPrint(self.allocator, "P6\n{d} {d}\n255\n", .{ w, h });
-            defer self.allocator.free(header);
+            // Encode RGBA to valid PNG
+            const png_bytes = try ffi.ffmpeg.encodePng(self.allocator, rgba, w, h);
+            defer self.allocator.free(png_bytes);
 
-            const total_ppm_len = header.len + (@as(usize, w) * @as(usize, h) * 3);
-            const ppm_buf = try self.allocator.alloc(u8, total_ppm_len);
-            defer self.allocator.free(ppm_buf);
-
-            @memcpy(ppm_buf[0..header.len], header);
-            var write_pos = header.len;
-            for (0..h) |y| {
-                for (0..w) |x| {
-                    const idx = (y * w + x) * 4;
-                    ppm_buf[write_pos + 0] = rgba[idx + 0];
-                    ppm_buf[write_pos + 1] = rgba[idx + 1];
-                    ppm_buf[write_pos + 2] = rgba[idx + 2];
-                    write_pos += 3;
-                }
-            }
-
-            // Base64 encode
-            const b64_len = std.base64.standard.Encoder.calcSize(ppm_buf.len);
+            // Base64 encode PNG
+            const b64_len = std.base64.standard.Encoder.calcSize(png_bytes.len);
             const b64_buf = try self.allocator.alloc(u8, b64_len);
             defer self.allocator.free(b64_buf);
-            _ = std.base64.standard.Encoder.encode(b64_buf, ppm_buf);
+            _ = std.base64.standard.Encoder.encode(b64_buf, png_bytes);
 
             return try std.fmt.allocPrint(
                 self.allocator,
-                \\{{"jsonrpc":"2.0","id":{s},"result":{{"content":[{{"type":"text","text":"Rendered frame at t=1.0s ({d}x{d})"}},{{"type":"image","mimeType":"image/ppm","data":"{s}"}}]}}}}
+                \\{{"jsonrpc":"2.0","id":{s},"result":{{"content":[{{"type":"text","text":"Rendered frame at t=1.0s ({d}x{d})"}},{{"type":"image","mimeType":"image/png","data":"{s}"}}]}}}}
             ,
                 .{ id_str, w, h, b64_buf },
             );

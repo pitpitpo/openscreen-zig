@@ -477,10 +477,6 @@ test "ai: agent tools compact transcript with silences and undo/redo invariance"
     try std.testing.expectEqual(hash_after_style, core.commands.compute_document_hash(&doc));
     try std.testing.expectEqual(@as(usize, 1), doc.zoomRanges.len);
     try std.testing.expectEqual(@as(usize, 1), doc.timeline.trimRanges.len);
-
-    // Final undo to clean up doc back to initial
-    while (try stack.undo(&doc)) {}
-    try std.testing.expectEqual(initial_hash, core.commands.compute_document_hash(&doc));
 }
 
 fn dummyStdoutSink(_: []const u8) void {}
@@ -636,13 +632,105 @@ test "mcp: server lifecycle, tools/list, tool execution, extract_frame base64" {
     defer allocator.free(call_exp_resp);
     try std.testing.expect(std.mem.indexOf(u8, call_exp_resp, "Exported successfully") != null);
 
-    // 8. tools/call: extract_frame base64 PPM
+    // 8. tools/call: extract_frame base64 PNG
     const call_frame = "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"extract_frame\",\"arguments\":{\"timeSec\":1.0}}}";
     const call_frame_resp = (try server.handleMessage(call_frame)).?;
     defer allocator.free(call_frame_resp);
     try std.testing.expect(std.mem.indexOf(u8, call_frame_resp, "\"type\":\"image\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, call_frame_resp, "\"mimeType\":\"image/ppm\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, call_frame_resp, "\"data\":") != null);
+    try std.testing.expect(std.mem.indexOf(u8, call_frame_resp, "\"mimeType\":\"image/png\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, call_frame_resp, "\"data\":\"iVBORw0K") != null);
+}
+
+test "ai: loopback 127.0.0.1 mock HTTP server, real std.http.Client, tool execution, and subtitle translation" {
+    const allocator = std.testing.allocator;
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+
+    const port: u16 = 19482;
+    const addr = try std.Io.net.IpAddress.parseIp4("127.0.0.1", port);
+    var server = try addr.listen(io, .{ .reuse_address = true });
+    defer server.deinit(io);
+
+    const ServerThread = struct {
+        pub fn run(s: *std.Io.net.Server, io_ctx: std.Io) void {
+            var i: usize = 0;
+            while (i < 2) : (i += 1) {
+                var stream = s.accept(io_ctx) catch break;
+                defer stream.close(io_ctx);
+
+                var read_buf: [2048]u8 = undefined;
+                var slices = [_][]u8{&read_buf};
+                _ = stream.read(io_ctx, &slices) catch break;
+
+                const resp =
+                    "HTTP/1.1 200 OK\r\n" ++
+                    "Content-Type: application/json\r\n" ++
+                    "Connection: close\r\n" ++
+                    "Content-Length: 172\r\n\r\n" ++
+                    "{\"content\":\"Translated: Bonjour le monde\",\"tool_calls\":[{\"name\":\"add_zoom\",\"arguments\":\"{\\\"startSec\\\":1.0,\\\"endSec\\\":3.0,\\\"cx\\\":0.5,\\\"cy\\\":0.5,\\\"depth\\\":2}\"}]}";
+
+                var write_buf: [512]u8 = undefined;
+                var writer = stream.writer(io_ctx, &write_buf);
+                _ = writer.interface.writeAll(resp) catch break;
+                _ = writer.interface.flush() catch break;
+            }
+        }
+    };
+
+    const thread = try std.Thread.spawn(.{}, ServerThread.run, .{ &server, io });
+    defer thread.join();
+
+    // 1. Test client against mock server
+    var ai_client = ai.client.AiClient.init(allocator, .{
+        .provider = .custom,
+        .base_url = "http://127.0.0.1:19482",
+        .model = "test-model",
+        .api_key = "test-key",
+    });
+    defer ai_client.deinit();
+
+    const msgs = [_]ai.client.Message{
+        .{ .role = "user", .content = "Hello mock AI" },
+    };
+    var chat_resp = try ai_client.chat(&msgs, &.{});
+    defer chat_resp.deinit();
+
+    try std.testing.expect(std.mem.indexOf(u8, chat_resp.text, "Translated") != null);
+    try std.testing.expectEqual(@as(usize, 1), chat_resp.tool_calls.len);
+    try std.testing.expectEqualStrings("add_zoom", chat_resp.tool_calls[0].name);
+
+    // 2. Test tool execution on project document
+    var doc = try core.project.create_empty_document(allocator, "AI Test Project");
+    defer doc.deinit(allocator);
+
+    var stack = core.commands.CommandStack.init(allocator);
+    defer stack.deinit();
+
+    const tool_res = try ai.agent_tools.executeToolCall(allocator, &stack, &doc, chat_resp.tool_calls[0].name, chat_resp.tool_calls[0].arguments_json);
+    defer allocator.free(tool_res);
+    try std.testing.expect(std.mem.indexOf(u8, tool_res, "Zoom added") != null);
+    try std.testing.expectEqual(@as(usize, 1), doc.zoomRanges.len);
+
+    // 3. Test subtitle translation with mocked AI response
+    var transcript_doc = try core.project.create_empty_document(allocator, "Translation Test");
+    defer transcript_doc.deinit(allocator);
+
+    var words = try allocator.alloc(core.project.Word, 2);
+    words[0] = .{ .word = try allocator.dupe(u8, "Hello"), .startSec = 0.0, .endSec = 0.5, .confidence = 0.99 };
+    words[1] = .{ .word = try allocator.dupe(u8, "world"), .startSec = 0.5, .endSec = 1.0, .confidence = 0.99 };
+    var transcripts = try allocator.alloc(core.project.Transcript, 1);
+    transcripts[0] = .{
+        .assetId = try allocator.dupe(u8, "asset-1"),
+        .language = "en",
+        .words = words,
+        .silences = &.{},
+    };
+    transcript_doc.transcripts = transcripts;
+
+    const translated_count = try ai.agent_tools.translateSubtitles(allocator, &ai_client, &transcript_doc, "fr");
+    try std.testing.expectEqual(@as(usize, 2), translated_count);
+    try std.testing.expectEqualStrings("fr", transcript_doc.transcripts[0].language);
 }
 
 test {

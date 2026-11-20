@@ -175,9 +175,10 @@ pub fn executeToolCall(
         if (end > dur and dur > 0.0) end = dur;
         if (end <= start) end = start + 1.0;
 
+        const clip_id = if (doc.timeline.clips.len > 0) doc.timeline.clips[0].id else "clip-1";
         const z = project.ZoomRange{
-            .id = "ai_zoom",
-            .clipId = if (doc.timeline.clips.len > 0) doc.timeline.clips[0].id else "clip-1",
+            .id = try allocator.dupe(u8, "ai_zoom"),
+            .clipId = try allocator.dupe(u8, clip_id),
             .startSec = start,
             .endSec = end,
             .depth = depth,
@@ -198,9 +199,10 @@ pub fn executeToolCall(
         if (end > dur and dur > 0.0) end = dur;
         if (end <= start) return error.InvalidCutRange;
 
+        const clip_id = if (doc.timeline.clips.len > 0) doc.timeline.clips[0].id else "clip-1";
         const tr = project.TrimRange{
-            .id = "ai_cut",
-            .clipId = if (doc.timeline.clips.len > 0) doc.timeline.clips[0].id else "clip-1",
+            .id = try allocator.dupe(u8, "ai_cut"),
+            .clipId = try allocator.dupe(u8, clip_id),
             .startSec = start,
             .endSec = end,
         };
@@ -223,9 +225,10 @@ pub fn executeToolCall(
         if (end > dur and dur > 0.0) end = dur;
         if (end <= start) end = start + 1.0;
 
+        const clip_id = if (doc.timeline.clips.len > 0) doc.timeline.clips[0].id else "clip-1";
         const sr = project.SpeedRange{
-            .id = "ai_speed",
-            .clipId = if (doc.timeline.clips.len > 0) doc.timeline.clips[0].id else "clip-1",
+            .id = try allocator.dupe(u8, "ai_speed"),
+            .clipId = try allocator.dupe(u8, clip_id),
             .startSec = start,
             .endSec = end,
             .speed = speed,
@@ -311,7 +314,7 @@ pub fn translateSubtitles(
     defer resp.deinit();
 
     // Update transcript language
-    t.language = try allocator.dupe(u8, target_language);
+    t.language = target_language;
 
     return t.words.len;
 }
