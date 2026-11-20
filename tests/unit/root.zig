@@ -5,6 +5,8 @@ const media = @import("media");
 const capture = @import("capture");
 const ffi = @import("ffi");
 const cursor_diag = @import("cursor_diag");
+const ai = @import("ai");
+const cli = @import("cli");
 
 extern "c" fn remove(filename: [*:0]const u8) c_int;
 
@@ -318,9 +320,331 @@ test "cursor diag: sidecar analyzer validates monotonicity and clicks" {
     try std.testing.expect(report.min_x >= 0.09 and report.max_x <= 0.36);
 }
 
+test "ai: client 7 providers url and payload formatting, and token parsing" {
+    const allocator = std.testing.allocator;
+
+    const providers = [_]struct {
+        provider: ai.client.Provider,
+        name: []const u8,
+        expected_url_substr: []const u8,
+        model: []const u8,
+    }{
+        .{ .provider = .anthropic, .name = "anthropic", .expected_url_substr = "api.anthropic.com/v1/messages", .model = "claude-3-5-sonnet" },
+        .{ .provider = .openai, .name = "openai", .expected_url_substr = "api.openai.com/v1/chat/completions", .model = "gpt-4o" },
+        .{ .provider = .gemini, .name = "gemini", .expected_url_substr = "generativelanguage.googleapis.com", .model = "gemini-2.0-flash" },
+        .{ .provider = .mistral, .name = "mistral", .expected_url_substr = "api.mistral.ai/v1/chat/completions", .model = "mistral-large" },
+        .{ .provider = .openrouter, .name = "openrouter", .expected_url_substr = "openrouter.ai/api/v1/chat/completions", .model = "anthropic/claude-3.5-sonnet" },
+        .{ .provider = .minimax, .name = "minimax", .expected_url_substr = "api.minimax.chat/v1/text/chatcompletion_v2", .model = "minimax-text-01" },
+        .{ .provider = .custom, .name = "custom", .expected_url_substr = "127.0.0.1:8080/v1/chat/completions", .model = "local-llama" },
+    };
+
+    for (providers) |p| {
+        try std.testing.expectEqual(p.provider, ai.client.Provider.fromString(p.name).?);
+
+        const config = ai.client.Config{
+            .provider = p.provider,
+            .api_key = "test_secret_key_12345",
+            .model = p.model,
+        };
+        var client_inst = ai.client.AiClient.init(allocator, config);
+        defer client_inst.deinit();
+
+        const url = try client_inst.buildRequestUrl(allocator);
+        defer allocator.free(url);
+
+        try std.testing.expect(std.mem.indexOf(u8, url, p.expected_url_substr) != null);
+
+        const msgs = [_]ai.client.Message{
+            .{ .role = "user", .content = "Hello, OpenScreen!" },
+        };
+        const payload = try client_inst.buildPayload(allocator, &msgs, &.{});
+        defer allocator.free(payload);
+
+        try std.testing.expect(payload.len > 0);
+        try std.testing.expect(std.mem.indexOf(u8, payload, "Hello, OpenScreen!") != null);
+    }
+
+    // Test parseResponse tool call and tokens extraction
+    var default_client = ai.client.AiClient.init(allocator, .{});
+    defer default_client.deinit();
+
+    const mock_response_json =
+        \\{
+        \\  "choices": [{
+        \\    "message": {
+        \\      "role": "assistant",
+        \\      "content": "Added a zoom and cut",
+        \\      "tool_calls": [{
+        \\        "id": "call_abc",
+        \\        "type": "function",
+        \\        "function": {
+        \\          "name": "add_zoom",
+        \\          "arguments": "{\"startSec\":1.0,\"endSec\":3.0}"
+        \\        }
+        \\      }]
+        \\    }
+        \\  }],
+        \\  "usage": {
+        \\    "prompt_tokens": 120,
+        \\    "completion_tokens": 45,
+        \\    "total_tokens": 165
+        \\  }
+        \\}
+    ;
+
+    var resp = try default_client.parseResponse(mock_response_json);
+    defer resp.deinit();
+
+    try std.testing.expect(std.mem.indexOf(u8, resp.text, "Added a zoom and cut") != null);
+    try std.testing.expectEqual(@as(usize, 1), resp.tool_calls.len);
+    try std.testing.expectEqualStrings("add_zoom", resp.tool_calls[0].name);
+}
+
+test "ai: agent tools compact transcript with silences and undo/redo invariance" {
+    const allocator = std.testing.allocator;
+
+    var doc = try core.project.create_empty_document(allocator, "Transcript AI Test");
+    defer doc.deinit(allocator);
+
+    // Build sample transcript with words and silence interval
+    const words = try allocator.alloc(core.project.Word, 4);
+    words[0] = .{ .word = try allocator.dupe(u8, "Welcome"), .startSec = 0.5, .endSec = 0.9, .confidence = 0.98 };
+    words[1] = .{ .word = try allocator.dupe(u8, "to"), .startSec = 0.95, .endSec = 1.1, .confidence = 0.99 };
+    words[2] = .{ .word = try allocator.dupe(u8, "the"), .startSec = 3.6, .endSec = 3.8, .confidence = 0.95 };
+    words[3] = .{ .word = try allocator.dupe(u8, "demo"), .startSec = 3.85, .endSec = 4.2, .confidence = 0.97 };
+
+    const silences = try allocator.alloc(core.project.Silence, 1);
+    silences[0] = .{ .startSec = 1.1, .endSec = 3.5, .durationSec = 2.4 };
+
+    const t_slice = try allocator.alloc(core.project.Transcript, 1);
+    t_slice[0] = .{
+        .assetId = try allocator.dupe(u8, "asset-1"),
+        .language = "en",
+        .words = words,
+        .silences = silences,
+    };
+    doc.transcripts = t_slice;
+
+    // Verify compact transcript format includes [silence 2.4s]
+    const compact = try ai.agent_tools.buildCompactTranscript(allocator, &doc);
+    defer allocator.free(compact.text);
+
+    try std.testing.expectEqual(@as(usize, 4), compact.word_count);
+    try std.testing.expectEqual(@as(usize, 1), compact.silence_count);
+    try std.testing.expect(std.mem.indexOf(u8, compact.text, "[silence 2.4s]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, compact.text, "Welcome to") != null);
+    try std.testing.expect(std.mem.indexOf(u8, compact.text, "the demo") != null);
+
+    // Context summary
+    const ctx = try ai.agent_tools.buildTimelineContext(allocator, &doc);
+    defer allocator.free(ctx);
+    try std.testing.expect(std.mem.indexOf(u8, ctx, "Transcript AI Test") != null);
+
+    // Verify 100% undoable execution via CommandStack
+    var stack = core.commands.CommandStack.init(allocator);
+    defer stack.deinit();
+
+    const initial_hash = core.commands.compute_document_hash(&doc);
+
+    // 1. Add zoom via executeToolCall
+    const zoom_res = try ai.agent_tools.executeToolCall(allocator, &stack, &doc, "add_zoom", "{\"startSec\":0.5,\"endSec\":2.5,\"focusX\":0.6,\"focusY\":0.4,\"depth\":3}");
+    defer allocator.free(zoom_res);
+    try std.testing.expect(doc.zoomRanges.len == 1);
+    const hash_after_zoom = core.commands.compute_document_hash(&doc);
+    try std.testing.expect(hash_after_zoom != initial_hash);
+
+    // 2. Add cut via executeToolCall
+    const cut_res = try ai.agent_tools.executeToolCall(allocator, &stack, &doc, "add_cut", "{\"startSec\":1.1,\"endSec\":3.5}");
+    defer allocator.free(cut_res);
+    try std.testing.expect(doc.timeline.trimRanges.len == 1);
+    const hash_after_cut = core.commands.compute_document_hash(&doc);
+    try std.testing.expect(hash_after_cut != hash_after_zoom);
+
+    // 3. Set style
+    const style_res = try ai.agent_tools.executeToolCall(allocator, &stack, &doc, "set_style", "{\"aspectRatio\":\"9:16\",\"shadow\":0.8,\"padding\":32.0}");
+    defer allocator.free(style_res);
+    const hash_after_style = core.commands.compute_document_hash(&doc);
+    try std.testing.expect(hash_after_style != hash_after_cut);
+
+    // Undo all 3 operations -> must return exactly to initial state hash
+    while (try stack.undo(&doc)) {}
+    try std.testing.expectEqual(initial_hash, core.commands.compute_document_hash(&doc));
+    try std.testing.expectEqual(@as(usize, 0), doc.zoomRanges.len);
+    try std.testing.expectEqual(@as(usize, 0), doc.timeline.trimRanges.len);
+
+    // Redo all 3 operations -> must match hash_after_style
+    while (try stack.redo(&doc)) {}
+    try std.testing.expectEqual(hash_after_style, core.commands.compute_document_hash(&doc));
+    try std.testing.expectEqual(@as(usize, 1), doc.zoomRanges.len);
+    try std.testing.expectEqual(@as(usize, 1), doc.timeline.trimRanges.len);
+
+    // Final undo to clean up doc back to initial
+    while (try stack.undo(&doc)) {}
+    try std.testing.expectEqual(initial_hash, core.commands.compute_document_hash(&doc));
+}
+
+fn dummyStdoutSink(_: []const u8) void {}
+
+test "cli: NDJSON protocol formatting and exit codes" {
+    cli.cli.stdout_writer_override = dummyStdoutSink;
+    cli.cli.stderr_writer_override = dummyStdoutSink;
+    defer {
+        cli.cli.stdout_writer_override = null;
+        cli.cli.stderr_writer_override = null;
+    }
+
+    const allocator = std.testing.allocator;
+    var cli_app = cli.cli.Cli.init(allocator);
+
+    // 1. Version (exit 0)
+    const args_ver = [_][]const u8{ "openscreen", "--version" };
+    const code_ver = try cli_app.run(&args_ver);
+    try std.testing.expectEqual(@as(u8, 0), code_ver);
+
+    // 2. Help (exit 0)
+    const args_help = [_][]const u8{ "openscreen", "help" };
+    const code_help = try cli_app.run(&args_help);
+    try std.testing.expectEqual(@as(u8, 0), code_help);
+
+    // 3. Sources --json (exit 0)
+    const args_src = [_][]const u8{ "openscreen", "sources", "--json" };
+    const code_src = try cli_app.run(&args_src);
+    try std.testing.expectEqual(@as(u8, 0), code_src);
+
+    // 4. Invalid subcommand (exit 2: invalid args)
+    const args_bad = [_][]const u8{ "openscreen", "nonexistent_subcmd" };
+    const code_bad = try cli_app.run(&args_bad);
+    try std.testing.expectEqual(@as(u8, 2), code_bad);
+
+    // 5. Record without required --project (exit 2: invalid args)
+    const args_rec_bad = [_][]const u8{ "openscreen", "record", "--duration", "1.0" };
+    const code_rec_bad = try cli_app.run(&args_rec_bad);
+    try std.testing.expectEqual(@as(u8, 2), code_rec_bad);
+
+    // 6. Record valid project with --json (exit 0)
+    const p_path = if (@import("builtin").os.tag == .windows) "test_cli_rec.openscreen" else "/tmp/test_cli_rec.openscreen";
+    defer {
+        var p_z: [1024]u8 = undefined;
+        @memcpy(p_z[0..p_path.len], p_path);
+        p_z[p_path.len] = 0;
+        _ = remove(@ptrCast(&p_z));
+    }
+    const args_rec = [_][]const u8{ "openscreen", "record", "--duration", "0.05", "--project", p_path, "--json" };
+    const code_rec = try cli_app.run(&args_rec);
+    try std.testing.expectEqual(@as(u8, 0), code_rec);
+
+    // 7. Edit non-existent file (exit 1: operational error)
+    const args_edit_missing = [_][]const u8{ "openscreen", "edit", "/nonexistent/path/never_existed.openscreen", "--json" };
+    const code_edit_missing = try cli_app.run(&args_edit_missing);
+    try std.testing.expectEqual(@as(u8, 1), code_edit_missing);
+
+    // 8. Edit existing file (exit 0)
+    const args_edit = [_][]const u8{ "openscreen", "edit", p_path, "--add-zoom", "--aspect", "16:9", "--json" };
+    const code_edit = try cli_app.run(&args_edit);
+    try std.testing.expectEqual(@as(u8, 0), code_edit);
+
+    // 9. Captions on project (exit 0)
+    const args_cap = [_][]const u8{ "openscreen", "captions", p_path, "--json" };
+    const code_cap = try cli_app.run(&args_cap);
+    try std.testing.expectEqual(@as(u8, 0), code_cap);
+
+    // 10. Export to MP4 with --json (exit 0)
+    const out_mp4 = if (@import("builtin").os.tag == .windows) "test_cli_out.mp4" else "/tmp/test_cli_out.mp4";
+    defer {
+        var out_z: [1024]u8 = undefined;
+        @memcpy(out_z[0..out_mp4.len], out_mp4);
+        out_z[out_mp4.len] = 0;
+        _ = remove(@ptrCast(&out_z));
+    }
+    const args_exp = [_][]const u8{ "openscreen", "export", p_path, "-o", out_mp4, "--json" };
+    const code_exp = try cli_app.run(&args_exp);
+    try std.testing.expectEqual(@as(u8, 0), code_exp);
+}
+
+test "mcp: server lifecycle, tools/list, tool execution, extract_frame base64" {
+    cli.mcp_server.stdout_writer_override = dummyStdoutSink;
+    defer cli.mcp_server.stdout_writer_override = null;
+
+    const allocator = std.testing.allocator;
+
+    var server = cli.mcp_server.McpServer.init(allocator);
+    defer server.deinit();
+
+    // 1. initialize
+    const init_req = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}";
+    const init_resp = (try server.handleMessage(init_req)).?;
+    defer allocator.free(init_resp);
+    try std.testing.expect(std.mem.indexOf(u8, init_resp, "\"name\":\"openscreen\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, init_resp, "\"protocolVersion\":\"2024-11-05\"") != null);
+
+    // 2. ping
+    const ping_req = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\",\"params\":{}}";
+    const ping_resp = (try server.handleMessage(ping_req)).?;
+    defer allocator.free(ping_resp);
+    try std.testing.expect(std.mem.indexOf(u8, ping_resp, "\"result\":{}") != null);
+
+    // 3. tools/list
+    const list_req = "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\",\"params\":{}}";
+    const list_resp = (try server.handleMessage(list_req)).?;
+    defer allocator.free(list_resp);
+    try std.testing.expect(std.mem.indexOf(u8, list_resp, "\"name\":\"list_sources\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, list_resp, "\"name\":\"record_screen\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, list_resp, "\"name\":\"inspect_project\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, list_resp, "\"name\":\"get_transcript\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, list_resp, "\"name\":\"generate_captions\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, list_resp, "\"name\":\"add_zoom\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, list_resp, "\"name\":\"remove_zoom\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, list_resp, "\"name\":\"add_cut\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, list_resp, "\"name\":\"remove_cut\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, list_resp, "\"name\":\"export_video\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, list_resp, "\"name\":\"extract_frame\"") != null);
+
+    // 4. tools/call: list_sources
+    const call_src = "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"list_sources\",\"arguments\":{}}}";
+    const call_src_resp = (try server.handleMessage(call_src)).?;
+    defer allocator.free(call_src_resp);
+    try std.testing.expect(std.mem.indexOf(u8, call_src_resp, "\"content\":") != null);
+
+    // 5. tools/call: add_zoom
+    const call_zoom = "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"add_zoom\",\"arguments\":{\"startTimeSec\":1.0,\"durationSec\":2.0,\"scale\":1.5}}}";
+    const call_zoom_resp = (try server.handleMessage(call_zoom)).?;
+    defer allocator.free(call_zoom_resp);
+    try std.testing.expect(std.mem.indexOf(u8, call_zoom_resp, "Zoom added") != null);
+
+    // 6. tools/call: add_cut
+    const call_cut = "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"add_cut\",\"arguments\":{\"startSec\":0.5,\"endSec\":1.5}}}";
+    const call_cut_resp = (try server.handleMessage(call_cut)).?;
+    defer allocator.free(call_cut_resp);
+    try std.testing.expect(std.mem.indexOf(u8, call_cut_resp, "Cut added") != null);
+
+    // 7. tools/call: export_video
+    const mcp_out = if (@import("builtin").os.tag == .windows) "test_mcp_out.mp4" else "/tmp/test_mcp_out.mp4";
+    defer {
+        var m_z: [1024]u8 = undefined;
+        @memcpy(m_z[0..mcp_out.len], mcp_out);
+        m_z[mcp_out.len] = 0;
+        _ = remove(@ptrCast(&m_z));
+    }
+    const call_exp = try std.fmt.allocPrint(allocator, "{{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{{\"name\":\"export_video\",\"arguments\":{{\"outputPath\":\"{s}\",\"fps\":30.0}}}}}}", .{mcp_out});
+    defer allocator.free(call_exp);
+    const call_exp_resp = (try server.handleMessage(call_exp)).?;
+    defer allocator.free(call_exp_resp);
+    try std.testing.expect(std.mem.indexOf(u8, call_exp_resp, "Exported successfully") != null);
+
+    // 8. tools/call: extract_frame base64 PPM
+    const call_frame = "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"extract_frame\",\"arguments\":{\"timeSec\":1.0}}}";
+    const call_frame_resp = (try server.handleMessage(call_frame)).?;
+    defer allocator.free(call_frame_resp);
+    try std.testing.expect(std.mem.indexOf(u8, call_frame_resp, "\"type\":\"image\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, call_frame_resp, "\"mimeType\":\"image/ppm\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, call_frame_resp, "\"data\":") != null);
+}
+
 test {
     _ = core;
     _ = compositor;
     _ = media;
     _ = capture;
+    _ = ai;
+    _ = cli;
 }

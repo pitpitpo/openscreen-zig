@@ -215,13 +215,31 @@ static DWORD WINAPI WinCaptureThread(LPVOID lpParam) {
             }
             h->last_button_state = cur_btn;
 
+            int cur_shape = OSC_CURSOR_DEFAULT;
+            if (getenv("OPENSCREEN_TEST_HEADLESS") == NULL) {
+                CURSORINFO ci = { sizeof(ci) };
+                if (GetCursorInfo(&ci) && (ci.flags & CURSOR_SHOWING)) {
+                    static HCURSOR hArrow = LoadCursor(NULL, IDC_ARROW);
+                    static HCURSOR hIBeam = LoadCursor(NULL, IDC_IBEAM);
+                    static HCURSOR hHand = LoadCursor(NULL, IDC_HAND);
+                    static HCURSOR hCross = LoadCursor(NULL, IDC_CROSS);
+                    static HCURSOR hSizeAll = LoadCursor(NULL, IDC_SIZEALL);
+                    static HCURSOR hSizeWE = LoadCursor(NULL, IDC_SIZEWE);
+                    static HCURSOR hSizeNS = LoadCursor(NULL, IDC_SIZENS);
+                    if (ci.hCursor == hIBeam) cur_shape = OSC_CURSOR_IBEAM;
+                    else if (ci.hCursor == hHand) cur_shape = OSC_CURSOR_HAND;
+                    else if (ci.hCursor == hCross) cur_shape = OSC_CURSOR_CROSSHAIR;
+                    else if (ci.hCursor == hSizeAll || ci.hCursor == hSizeWE || ci.hCursor == hSizeNS) cur_shape = OSC_CURSOR_RESIZE;
+                }
+            }
+
             OscCursorEvent ev;
             ev.timestamp_ns = pts;
             ev.x = nx;
             ev.y = ny;
             ev.raw_x = (int32_t)(nx * (float)w);
             ev.raw_y = (int32_t)(ny * (float)h_px);
-            ev.shape = OSC_CURSOR_DEFAULT;
+            ev.shape = cur_shape;
             ev.event_type = ev_type;
             ev.button = cur_btn;
             ev.scroll_dx = 0.0f;

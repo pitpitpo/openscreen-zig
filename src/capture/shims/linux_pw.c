@@ -222,6 +222,25 @@ static void *capture_thread_func(void *arg) {
                 mask = (frame_counter % 60 == 0) ? Button1Mask : 0;
             }
 
+            int cur_shape = OSC_CURSOR_DEFAULT;
+            if (t_dpy && getenv("OPENSCREEN_TEST_HEADLESS") == NULL) {
+                XFixesCursorImage *cur_img = XFixesGetCursorImage(t_dpy);
+                if (cur_img) {
+                    if (cur_img->name) {
+                        if (strstr(cur_img->name, "ibeam") || strstr(cur_img->name, "xterm") || strstr(cur_img->name, "text")) {
+                            cur_shape = OSC_CURSOR_IBEAM;
+                        } else if (strstr(cur_img->name, "hand") || strstr(cur_img->name, "pointer")) {
+                            cur_shape = OSC_CURSOR_HAND;
+                        } else if (strstr(cur_img->name, "cross")) {
+                            cur_shape = OSC_CURSOR_CROSSHAIR;
+                        } else if (strstr(cur_img->name, "size") || strstr(cur_img->name, "resize")) {
+                            cur_shape = OSC_CURSOR_RESIZE;
+                        }
+                    }
+                    XFree(cur_img);
+                }
+            }
+
             int cur_btn = OSC_MOUSE_NONE;
             if (mask & Button1Mask) cur_btn = OSC_MOUSE_LEFT;
             else if (mask & Button3Mask) cur_btn = OSC_MOUSE_RIGHT;
@@ -248,7 +267,7 @@ static void *capture_thread_func(void *arg) {
             ev.y = ny;
             ev.raw_x = (int32_t)root_x;
             ev.raw_y = (int32_t)root_y;
-            ev.shape = OSC_CURSOR_DEFAULT;
+            ev.shape = cur_shape;
             ev.event_type = ev_type;
             ev.button = cur_btn;
             ev.scroll_dx = 0.0f;

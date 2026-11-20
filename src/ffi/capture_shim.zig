@@ -151,6 +151,16 @@ pub extern "c" fn osc_capture_resume(handle: *OscCaptureHandle) c_int;
 pub extern "c" fn osc_capture_stop(handle: *OscCaptureHandle) c_int;
 pub extern "c" fn osc_capture_destroy(handle: *OscCaptureHandle) void;
 
+pub const enumerateSources = osc_capture_enumerate_sources;
+pub const checkPermission = osc_capture_check_permission;
+pub const requestPermission = osc_capture_request_permission;
+pub const create = osc_capture_create;
+pub const start = osc_capture_start;
+pub const pause = osc_capture_pause;
+pub const resumeCapture = osc_capture_resume;
+pub const stop = osc_capture_stop;
+pub const destroy = osc_capture_destroy;
+
 pub extern "c" fn osc_capture_set_excluded_windows(
     handle: *OscCaptureHandle,
     window_ids: [*]const [*:0]const u8,

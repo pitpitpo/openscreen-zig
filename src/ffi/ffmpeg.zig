@@ -4,6 +4,14 @@ pub const OscDemuxer = opaque {};
 pub const OscMuxer = opaque {};
 pub const OscGifMuxer = opaque {};
 
+pub extern "c" fn av_log_set_level(level: c_int) void;
+pub const AV_LOG_QUIET: c_int = -8;
+pub const AV_LOG_PANIC: c_int = 0;
+pub const AV_LOG_FATAL: c_int = 8;
+pub const AV_LOG_ERROR: c_int = 16;
+pub const AV_LOG_WARNING: c_int = 24;
+pub const AV_LOG_INFO: c_int = 32;
+
 pub extern "c" fn osc_averror_eagain() c_int;
 pub extern "c" fn osc_probe_best_h264_encoder(out_name: [*:0]u8, max_len: usize) c_int;
 

@@ -570,3 +570,81 @@ test "Gate 4: Native capture, synchronized tracks, sidecar telemetry, and MP4 ex
         try std.testing.expect(non_blank > 100);
     }
 }
+
+test "Gate 5: Headless CLI and MCP Stdio Child Process Integration" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+    const exe_path = if (builtin.os.tag == .windows) "zig-out\\bin\\openscreen.exe" else "./zig-out/bin/openscreen";
+
+    // 1. openscreen --version
+    const ver_res = try std.process.run(allocator, io, .{
+        .argv = &.{ exe_path, "--version" },
+    });
+    defer {
+        allocator.free(ver_res.stdout);
+        allocator.free(ver_res.stderr);
+    }
+    try std.testing.expectEqual(@as(u8, 0), ver_res.term.exited);
+    try std.testing.expect(std.mem.indexOf(u8, ver_res.stdout, "openscreen 2.0.0") != null);
+
+    // 2. openscreen sources --json
+    const src_res = try std.process.run(allocator, io, .{
+        .argv = &.{ exe_path, "sources", "--json" },
+    });
+    defer {
+        allocator.free(src_res.stdout);
+        allocator.free(src_res.stderr);
+    }
+    try std.testing.expectEqual(@as(u8, 0), src_res.term.exited);
+    try std.testing.expect(std.mem.indexOf(u8, src_res.stdout, "\"event\":\"done\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, src_res.stdout, "\"sources\":") != null);
+
+    // 3. openscreen mcp (JSON-RPC 2.0 stdio server)
+    var child = try std.process.spawn(io, .{
+        .argv = &.{ exe_path, "mcp" },
+        .stdin = .pipe,
+        .stdout = .pipe,
+        .stderr = .ignore,
+    });
+    defer child.kill(io);
+
+    // 3a. Send initialize
+    const init_req = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n";
+    try child.stdin.?.writeStreamingAll(io, init_req);
+
+    var init_buf: [4096]u8 = undefined;
+    var init_slices = [_][]u8{&init_buf};
+    const n_init = try child.stdout.?.readStreaming(io, &init_slices);
+    try std.testing.expect(n_init > 0);
+    const init_resp = init_buf[0..n_init];
+    try std.testing.expect(std.mem.indexOf(u8, init_resp, "\"name\":\"openscreen\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, init_resp, "\"protocolVersion\":\"2024-11-05\"") != null);
+
+    // 3b. Send tools/call extract_frame
+    const frame_req = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"extract_frame\",\"arguments\":{\"timeSec\":0.5}}}\n";
+    try child.stdin.?.writeStreamingAll(io, frame_req);
+
+    var frame_buf: [4096]u8 = undefined;
+    var frame_slices = [_][]u8{&frame_buf};
+    const n_frame = try child.stdout.?.readStreaming(io, &frame_slices);
+    try std.testing.expect(n_frame > 0);
+    const frame_resp = frame_buf[0..n_frame];
+    try std.testing.expect(std.mem.indexOf(u8, frame_resp, "image/ppm") != null);
+    try std.testing.expect(std.mem.indexOf(u8, frame_resp, "data") != null);
+
+    // 3c. Close stdin to initiate graceful shutdown and drain remaining output
+    child.stdin.?.close(io);
+    child.stdin = null;
+
+    var drain_buf: [16384]u8 = undefined;
+    var drain_slices = [_][]u8{&drain_buf};
+    while (true) {
+        const rd = child.stdout.?.readStreaming(io, &drain_slices) catch 0;
+        if (rd == 0) break;
+    }
+    child.stdout.?.close(io);
+    child.stdout = null;
+
+    const term = try child.wait(io);
+    try std.testing.expectEqual(@as(u8, 0), term.exited);
+}

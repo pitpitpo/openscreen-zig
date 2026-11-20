@@ -212,6 +212,28 @@ pub fn build(b: *std.Build) void {
     });
     cursor_diag_mod.link_libc = true;
 
+    // AI module
+    const openscreen_ai_mod = b.createModule(.{
+        .root_source_file = b.path("src/ai/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    openscreen_ai_mod.addImport("core", openscreen_core_mod);
+
+    // CLI module
+    const openscreen_cli_mod = b.createModule(.{
+        .root_source_file = b.path("src/cli/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    openscreen_cli_mod.addImport("core", openscreen_core_mod);
+    openscreen_cli_mod.addImport("compositor", openscreen_compositor_mod);
+    openscreen_cli_mod.addImport("media", openscreen_media_mod);
+    openscreen_cli_mod.addImport("capture", openscreen_capture_mod);
+    openscreen_cli_mod.addImport("ffi", openscreen_ffi_mod);
+    openscreen_cli_mod.addImport("cursor_diag", cursor_diag_mod);
+    openscreen_cli_mod.addImport("ai", openscreen_ai_mod);
+
     // Main executable module
     const core_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -223,6 +245,9 @@ pub fn build(b: *std.Build) void {
     core_mod.addImport("ffi", openscreen_ffi_mod);
     core_mod.addImport("media", openscreen_media_mod);
     core_mod.addImport("capture", openscreen_capture_mod);
+    core_mod.addImport("cursor_diag", cursor_diag_mod);
+    core_mod.addImport("ai", openscreen_ai_mod);
+    core_mod.addImport("cli", openscreen_cli_mod);
 
     // Main executable: openscreen
     const exe = b.addExecutable(.{
@@ -257,6 +282,8 @@ pub fn build(b: *std.Build) void {
     unit_mod.addImport("media", openscreen_media_mod);
     unit_mod.addImport("capture", openscreen_capture_mod);
     unit_mod.addImport("cursor_diag", cursor_diag_mod);
+    unit_mod.addImport("ai", openscreen_ai_mod);
+    unit_mod.addImport("cli", openscreen_cli_mod);
     const unit_tests = b.addTest(.{
         .root_module = unit_mod,
     });
@@ -264,6 +291,10 @@ pub fn build(b: *std.Build) void {
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run all unit tests");
     test_step.dependOn(&run_unit_tests.step);
+
+    const install_unit_tests = b.addInstallArtifact(unit_tests, .{});
+    const build_test_step = b.step("build-test", "Build unit tests binary");
+    build_test_step.dependOn(&install_unit_tests.step);
 
     // Golden pixel & SSIM tests: zig build test-golden
     const golden_mod = b.createModule(.{
@@ -295,11 +326,14 @@ pub fn build(b: *std.Build) void {
     e2e_mod.addImport("media", openscreen_media_mod);
     e2e_mod.addImport("capture", openscreen_capture_mod);
     e2e_mod.addImport("cursor_diag", cursor_diag_mod);
+    e2e_mod.addImport("ai", openscreen_ai_mod);
+    e2e_mod.addImport("cli", openscreen_cli_mod);
     const e2e_tests = b.addTest(.{
         .root_module = e2e_mod,
     });
     linkOpenScreenLibs(b, e2e_tests, wgpu_dep, target);
     const run_e2e_tests = b.addRunArtifact(e2e_tests);
+    run_e2e_tests.step.dependOn(b.getInstallStep());
     const e2e_step = b.step("test-e2e", "Run end-to-end integration tests");
     e2e_step.dependOn(&run_e2e_tests.step);
 

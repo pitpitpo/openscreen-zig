@@ -6,7 +6,7 @@ const shim = ffi.capture;
 extern "c" fn remove(filename: [*:0]const u8) c_int;
 extern "c" fn fflush(stream: *std.c.FILE) c_int;
 
-fn sleepMs(ms: u32) void {
+pub fn sleepMs(ms: u32) void {
     if (builtin.os.tag == .windows) {
         const win = struct {
             extern "kernel32" fn Sleep(dwMilliseconds: u32) callconv(.winapi) void;

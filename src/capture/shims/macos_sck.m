@@ -210,13 +210,29 @@ static void *macos_capture_thread(void *arg) {
                 ny = 0.5f + 0.3f * cosf(t * 1.5f);
             }
 
+            int cur_shape = OSC_CURSOR_DEFAULT;
+            if (getenv("OPENSCREEN_TEST_HEADLESS") == NULL) {
+                @autoreleasepool {
+                    NSCursor *current = [NSCursor currentCursor];
+                    if (current == [NSCursor IBeamCursor]) {
+                        cur_shape = OSC_CURSOR_IBEAM;
+                    } else if (current == [NSCursor pointingHandCursor]) {
+                        cur_shape = OSC_CURSOR_HAND;
+                    } else if (current == [NSCursor crosshairCursor]) {
+                        cur_shape = OSC_CURSOR_CROSSHAIR;
+                    } else if (current == [NSCursor resizeLeftRightCursor] || current == [NSCursor resizeUpDownCursor]) {
+                        cur_shape = OSC_CURSOR_RESIZE;
+                    }
+                }
+            }
+
             OscCursorEvent ev;
             ev.timestamp_ns = pts;
             ev.x = nx;
             ev.y = ny;
             ev.raw_x = (int32_t)(nx * (float)w);
             ev.raw_y = (int32_t)(ny * (float)h_px);
-            ev.shape = OSC_CURSOR_DEFAULT;
+            ev.shape = cur_shape;
             ev.event_type = (frame_counter % 60 == 0) ? OSC_MOUSE_EVENT_DOWN : OSC_MOUSE_EVENT_MOVE;
             ev.button = (frame_counter % 60 == 0) ? OSC_MOUSE_LEFT : OSC_MOUSE_NONE;
             ev.scroll_dx = 0.0f;
