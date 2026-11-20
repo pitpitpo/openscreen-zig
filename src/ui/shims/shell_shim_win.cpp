@@ -44,6 +44,10 @@ static LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 }
 
 int osc_shell_single_instance_lock(const char* user_data_path) {
+    if (g_win_mutex) {
+        return 1; /* Already locked by current process */
+    }
+
     char mutex_name[256];
     if (user_data_path && strlen(user_data_path) > 0) {
         snprintf(mutex_name, sizeof(mutex_name), "Local\\OpenScreen_Lock_%u", (unsigned int)strlen(user_data_path));
@@ -100,7 +104,8 @@ int osc_shell_tray_init(const char* tooltip, OscTrayCallback callback, void* use
         MultiByteToWideChar(CP_UTF8, 0, tooltip, -1, g_nid.szTip, sizeof(g_nid.szTip) / sizeof(WCHAR));
     }
 
-    return Shell_NotifyIconW(NIM_ADD, &g_nid) ? 1 : 0;
+    Shell_NotifyIconW(NIM_ADD, &g_nid);
+    return 1;
 }
 
 void osc_shell_tray_update_state(int is_recording) {
