@@ -151,6 +151,13 @@ pub const Cli = struct {
             }
         }
 
+        if (builtin.os.tag == .windows and is_json) {
+            const c_win = struct {
+                extern "c" fn _setmode(f: c_int, mode: c_int) c_int;
+            };
+            _ = c_win._setmode(1, 0x8000); // _O_BINARY
+        }
+
         // Strict stdout hygiene in JSON mode: mute FFmpeg C logs
         if (is_json) {
             ffi.ffmpeg.av_log_set_level(ffi.ffmpeg.AV_LOG_QUIET);

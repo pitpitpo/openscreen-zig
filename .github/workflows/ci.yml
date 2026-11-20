@@ -18,7 +18,7 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          sudo apt-get update -qq
+          sudo apt-get update -qq -o Acquire::Retries=3 -o Acquire::http::Timeout=30
           sudo apt-get install -y -qq \
             mesa-vulkan-drivers \
             libvulkan-dev \
@@ -117,9 +117,11 @@ jobs:
           $ffmpegDir = Get-ChildItem -Path "ffmpeg_extracted" -Directory | Select-Object -First 1
           New-Item -ItemType Directory -Force -Path "lib"
           New-Item -ItemType Directory -Force -Path "include"
+          New-Item -ItemType Directory -Force -Path "zig-out\bin"
           Copy-Item "$($ffmpegDir.FullName)\lib\*.lib" -Destination "lib\"
           Copy-Item "$($ffmpegDir.FullName)\include\*" -Destination "include\" -Recurse
           Copy-Item "$($ffmpegDir.FullName)\bin\*.dll" -Destination "."
+          Copy-Item "$($ffmpegDir.FullName)\bin\*.dll" -Destination "zig-out\bin\"
           echo "$($ffmpegDir.FullName)\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           echo "$((Get-Location).Path)" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
@@ -130,6 +132,7 @@ jobs:
           Invoke-WebRequest -Uri "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.27.1/microsoft.ml.onnxruntime.1.27.1.nupkg" -OutFile "ort.zip"
           Expand-Archive -Path "ort.zip" -DestinationPath "ort_extracted"
           Copy-Item "ort_extracted\runtimes\win-x64\native\onnxruntime.dll" -Destination "."
+          Copy-Item "ort_extracted\runtimes\win-x64\native\onnxruntime.dll" -Destination "zig-out\bin\"
 
       - name: Build openscreen binary
         run: zig build -Doptimize=ReleaseSafe
@@ -140,6 +143,7 @@ jobs:
           if ($wgpuDll) {
             Write-Host "Found wgpu_native.dll at $($wgpuDll.FullName)"
             Copy-Item $wgpuDll.FullName -Destination .
+            Copy-Item $wgpuDll.FullName -Destination "zig-out\bin\"
             $dir = $wgpuDll.DirectoryName
             echo "$dir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           }

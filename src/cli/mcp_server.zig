@@ -100,6 +100,14 @@ pub const McpServer = struct {
     }
 
     pub fn run(self: *McpServer) !void {
+        if (builtin.os.tag == .windows) {
+            const c_win = struct {
+                extern "c" fn _setmode(f: c_int, mode: c_int) c_int;
+            };
+            _ = c_win._setmode(0, 0x8000); // _O_BINARY
+            _ = c_win._setmode(1, 0x8000);
+        }
+
         // Strict stdout hygiene: silence C libraries on stdout
         ffi.ffmpeg.av_log_set_level(ffi.ffmpeg.AV_LOG_QUIET);
 
@@ -119,8 +127,9 @@ pub const McpServer = struct {
                         const resp = try self.handleMessage(trimmed);
                         if (resp) |json_str| {
                             defer self.allocator.free(json_str);
-                            writeStdout(json_str);
-                            writeStdout("\n");
+                            const line_out = try std.fmt.allocPrint(self.allocator, "{s}\n", .{json_str});
+                            defer self.allocator.free(line_out);
+                            writeStdout(line_out);
                         }
                     }
                     line_buf.clearRetainingCapacity();
@@ -193,7 +202,14 @@ pub const McpServer = struct {
             const tool_name = tool_name_val.string;
 
             const args_val = params_val.object.get("arguments");
-            return try self.handleToolCall(id_str, tool_name, args_val);
+            return self.handleToolCall(id_str, tool_name, args_val) catch |err| {
+                return try std.fmt.allocPrint(
+                    self.allocator,
+                    \\{{"jsonrpc":"2.0","id":{s},"error":{{"code":-32603,"message":"Internal error: {s}"}}}}
+                ,
+                    .{ id_str, @errorName(err) },
+                );
+            };
         } else {
             return try std.fmt.allocPrint(
                 self.allocator,
@@ -223,7 +239,7 @@ pub const McpServer = struct {
             \\{{"name":"undo","description":"Undo last edit operation on project","inputSchema":{{"type":"object","properties":{{"projectPath":{{"type":"string"}}}}}}}},
             \\{{"name":"redo","description":"Redo last undone edit operation on project","inputSchema":{{"type":"object","properties":{{"projectPath":{{"type":"string"}}}}}}}},
             \\{{"name":"export_video","description":"Export project timeline to MP4 or GIF","inputSchema":{{"type":"object","properties":{{"projectPath":{{"type":"string"}},"outputPath":{{"type":"string"}},"fps":{{"type":"integer"}}}}}}}},
-            \\{{"name":"extract_frame","description":"Render video frame at timestamp t and return PNG/PPM base64 for AI visual inspection","inputSchema":{{"type":"object","properties":{{"projectPath":{{"type":"string"}},"timeSec":{{"type":"number"}}}}}}}}
+            \\{{"name":"extract_frame","description":"Render video frame at timestamp t and return PNG/PPM base64 for AI visual inspection","inputSchema":{{"type":"object","properties":{{"projectPath":{{"type":"string"}},"timeSec":{{"type":"number"}},"width":{{"type":"integer"}},"height":{{"type":"integer"}}}}}}}}
             \\]}}}}
         ,
             .{id_str},
@@ -408,9 +424,10 @@ pub const McpServer = struct {
             const time_sec = self.getArgFloat(args_val, "timeSec") orelse 1.0;
             _ = time_sec;
 
+            const w: u32 = @intCast(@as(i64, @intFromFloat(self.getArgFloat(args_val, "width") orelse 64.0)));
+            const h: u32 = @intCast(@as(i64, @intFromFloat(self.getArgFloat(args_val, "height") orelse 36.0)));
+
             // Render single frame using CpuCompositor
-            const w: u32 = 320;
-            const h: u32 = 180;
             var comp = try compositor.CpuCompositor.init(self.allocator, w, h);
             defer comp.deinit();
 

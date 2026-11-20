@@ -608,27 +608,44 @@ test "Gate 5: Headless CLI and MCP Stdio Child Process Integration" {
     });
     defer child.kill(io);
 
+    const readResponseLine = struct {
+        fn read(out: anytype, io_ctx: anytype, buf: []u8) ![]const u8 {
+            var len: usize = 0;
+            while (len < buf.len) {
+                var chunk: [1]u8 = undefined;
+                var slice = [_][]u8{&chunk};
+                const n = try out.readStreaming(io_ctx, &slice);
+                if (n == 0) break;
+                if (chunk[0] == '\n') {
+                    const trimmed = std.mem.trim(u8, buf[0..len], "\r \t");
+                    if (trimmed.len > 0) return trimmed;
+                    len = 0; // Skip empty leading newlines
+                    continue;
+                }
+                buf[len] = chunk[0];
+                len += 1;
+            }
+            return std.mem.trim(u8, buf[0..len], "\r \t");
+        }
+    }.read;
+
     // 3a. Send initialize
     const init_req = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n";
     try child.stdin.?.writeStreamingAll(io, init_req);
 
     var init_buf: [4096]u8 = undefined;
-    var init_slices = [_][]u8{&init_buf};
-    const n_init = try child.stdout.?.readStreaming(io, &init_slices);
-    try std.testing.expect(n_init > 0);
-    const init_resp = init_buf[0..n_init];
+    const init_resp = try readResponseLine(&child.stdout.?, io, &init_buf);
+    try std.testing.expect(init_resp.len > 0);
     try std.testing.expect(std.mem.indexOf(u8, init_resp, "\"name\":\"openscreen\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, init_resp, "\"protocolVersion\":\"2024-11-05\"") != null);
 
     // 3b. Send tools/call extract_frame
-    const frame_req = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"extract_frame\",\"arguments\":{\"timeSec\":0.5}}}\n";
+    const frame_req = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"extract_frame\",\"arguments\":{\"timeSec\":0.5,\"width\":64,\"height\":36}}}\n";
     try child.stdin.?.writeStreamingAll(io, frame_req);
 
-    var frame_buf: [4096]u8 = undefined;
-    var frame_slices = [_][]u8{&frame_buf};
-    const n_frame = try child.stdout.?.readStreaming(io, &frame_slices);
-    try std.testing.expect(n_frame > 0);
-    const frame_resp = frame_buf[0..n_frame];
+    var frame_buf: [16384]u8 = undefined;
+    const frame_resp = try readResponseLine(&child.stdout.?, io, &frame_buf);
+    try std.testing.expect(frame_resp.len > 0);
     try std.testing.expect(std.mem.indexOf(u8, frame_resp, "image/ppm") != null);
     try std.testing.expect(std.mem.indexOf(u8, frame_resp, "data") != null);
 
