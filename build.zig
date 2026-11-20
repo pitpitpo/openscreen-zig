@@ -1,8 +1,61 @@
 const std = @import("std");
 
+fn linkWgpu(
+    b: *std.Build,
+    compile_step: *std.Build.Step.Compile,
+    wgpu_dep: ?*std.Build.Dependency,
+    target: std.Build.ResolvedTarget,
+) void {
+    _ = b;
+    if (wgpu_dep) |dep| {
+        const mod = compile_step.root_module;
+        mod.addLibraryPath(dep.path("lib"));
+        mod.link_libc = true;
+        const target_os = target.result.os.tag;
+        if (target_os == .linux) {
+            mod.addObjectFile(dep.path("lib/libwgpu_native.a"));
+            mod.linkSystemLibrary("m", .{});
+            mod.linkSystemLibrary("pthread", .{});
+            mod.linkSystemLibrary("dl", .{});
+            mod.linkSystemLibrary("gcc_s", .{});
+        } else if (target_os == .macos) {
+            mod.addObjectFile(dep.path("lib/libwgpu_native.a"));
+            mod.linkFramework("Metal", .{});
+            mod.linkFramework("QuartzCore", .{});
+            mod.linkFramework("Cocoa", .{});
+            mod.linkFramework("CoreGraphics", .{});
+            mod.linkFramework("Foundation", .{});
+            mod.linkFramework("IOKit", .{});
+            mod.linkFramework("IOSurface", .{});
+        } else if (target_os == .windows) {
+            mod.addObjectFile(dep.path("lib/wgpu_native.lib"));
+            mod.linkSystemLibrary("d3d12", .{});
+            mod.linkSystemLibrary("dxgi", .{});
+            mod.linkSystemLibrary("user32", .{});
+            mod.linkSystemLibrary("kernel32", .{});
+            mod.linkSystemLibrary("ntdll", .{});
+            mod.linkSystemLibrary("ws2_32", .{});
+            mod.linkSystemLibrary("userenv", .{});
+            mod.linkSystemLibrary("bcrypt", .{});
+        }
+    }
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    const target_os = target.result.os.tag;
+    const target_arch = target.result.cpu.arch;
+
+    var wgpu_dep: ?*std.Build.Dependency = null;
+    if (target_os == .linux and target_arch == .x86_64) {
+        wgpu_dep = b.lazyDependency("wgpu_linux_x86_64", .{});
+    } else if (target_os == .macos and target_arch == .aarch64) {
+        wgpu_dep = b.lazyDependency("wgpu_macos_aarch64", .{});
+    } else if (target_os == .windows and target_arch == .x86_64) {
+        wgpu_dep = b.lazyDependency("wgpu_windows_x86_64", .{});
+    }
 
     // Core library module
     const openscreen_core_mod = b.createModule(.{
@@ -11,19 +64,37 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // Core module
+    // FFI module (clean extern declarations, no @cImport)
+    const openscreen_ffi_mod = b.createModule(.{
+        .root_source_file = b.path("src/ffi/wgpu.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Compositor module
+    const openscreen_compositor_mod = b.createModule(.{
+        .root_source_file = b.path("src/compositor/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    openscreen_compositor_mod.addImport("core", openscreen_core_mod);
+    openscreen_compositor_mod.addImport("ffi", openscreen_ffi_mod);
+
+    // Main executable module
     const core_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
     core_mod.addImport("core", openscreen_core_mod);
+    core_mod.addImport("compositor", openscreen_compositor_mod);
 
     // Main executable: openscreen
     const exe = b.addExecutable(.{
         .name = "openscreen",
         .root_module = core_mod,
     });
+    linkWgpu(b, exe, wgpu_dep, target);
     b.installArtifact(exe);
 
     // Run command: zig build run
@@ -39,33 +110,43 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     unit_mod.addImport("core", openscreen_core_mod);
+    unit_mod.addImport("compositor", openscreen_compositor_mod);
     const unit_tests = b.addTest(.{
         .root_module = unit_mod,
     });
+    linkWgpu(b, unit_tests, wgpu_dep, target);
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run all unit tests");
     test_step.dependOn(&run_unit_tests.step);
 
     // Golden pixel & SSIM tests: zig build test-golden
-    const golden_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("tests/golden/root.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    const golden_mod = b.createModule(.{
+        .root_source_file = b.path("tests/golden/root.zig"),
+        .target = target,
+        .optimize = optimize,
     });
+    golden_mod.addImport("core", openscreen_core_mod);
+    golden_mod.addImport("compositor", openscreen_compositor_mod);
+    const golden_tests = b.addTest(.{
+        .root_module = golden_mod,
+    });
+    linkWgpu(b, golden_tests, wgpu_dep, target);
     const run_golden_tests = b.addRunArtifact(golden_tests);
     const golden_step = b.step("test-golden", "Run golden pixel and SSIM regression tests");
     golden_step.dependOn(&run_golden_tests.step);
 
     // End-to-end integration tests: zig build test-e2e
-    const e2e_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("tests/e2e/root.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    const e2e_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/root.zig"),
+        .target = target,
+        .optimize = optimize,
     });
+    e2e_mod.addImport("core", openscreen_core_mod);
+    e2e_mod.addImport("compositor", openscreen_compositor_mod);
+    const e2e_tests = b.addTest(.{
+        .root_module = e2e_mod,
+    });
+    linkWgpu(b, e2e_tests, wgpu_dep, target);
     const run_e2e_tests = b.addRunArtifact(e2e_tests);
     const e2e_step = b.step("test-e2e", "Run end-to-end integration tests");
     e2e_step.dependOn(&run_e2e_tests.step);

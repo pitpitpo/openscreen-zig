@@ -9,3 +9,5 @@ zig-out/
 *.so
 *.dylib
 *.dll
+*.ppm
+zig-pkg/
