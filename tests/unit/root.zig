@@ -528,6 +528,11 @@ test "cli: NDJSON protocol formatting and exit codes" {
         @memcpy(p_z[0..p_path.len], p_path);
         p_z[p_path.len] = 0;
         _ = remove(@ptrCast(&p_z));
+        const sidecar_tmp = if (@import("builtin").os.tag == .windows) "recorded_take.cursor.jsonl" else "/tmp/recorded_take.cursor.jsonl";
+        var s_z: [1024]u8 = undefined;
+        @memcpy(s_z[0..sidecar_tmp.len], sidecar_tmp);
+        s_z[sidecar_tmp.len] = 0;
+        _ = remove(@ptrCast(&s_z));
     }
     const args_rec = [_][]const u8{ "openscreen", "record", "--duration", "0.05", "--project", p_path, "--json" };
     const code_rec = try cli_app.run(&args_rec);

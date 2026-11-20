@@ -343,7 +343,8 @@ pub const McpServer = struct {
                 .{id_str},
             );
         } else if (std.mem.eql(u8, tool_name, "export_video")) {
-            const out_path = self.getArgString(args_val, "outputPath") orelse "/tmp/mcp_export.mp4";
+            const default_out = if (builtin.os.tag == .windows) "mcp_export.mp4" else "/tmp/mcp_export.mp4";
+            const out_path = self.getArgString(args_val, "outputPath") orelse default_out;
             const fps: u32 = @intCast(@as(i64, @intFromFloat(self.getArgFloat(args_val, "fps") orelse 30.0)));
 
             // Perform simple test render and export

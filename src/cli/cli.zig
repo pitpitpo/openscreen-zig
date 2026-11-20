@@ -257,10 +257,11 @@ pub const Cli = struct {
         }
 
         // Initialize session and write sample project
+        const out_dir = if (builtin.os.tag == .windows) "." else "/tmp";
         var session = try capture.CaptureSession.init(self.allocator, .{
             .target_fps = 30,
             .capture_cursor = true,
-            .output_dir = "/tmp",
+            .output_dir = out_dir,
             .take_name = "recorded_take",
         });
         defer session.deinit();
