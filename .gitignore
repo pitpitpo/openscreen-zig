@@ -11,4 +11,6 @@ zig-out/
 *.dll
 *.ppm
 *.bin
+*.mp4
+*.gif
 zig-pkg/

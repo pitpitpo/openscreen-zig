@@ -544,6 +544,7 @@ struct OscMuxer {
     int64_t next_audio_pts;
 
     AVPacket *pkt;
+    int header_written;
 };
 
 int osc_muxer_open(
@@ -777,6 +778,7 @@ int osc_muxer_open(
         return -1;
     }
     av_dict_free(&opts);
+    m->header_written = 1;
 
     m->pkt = av_packet_alloc();
     *out_muxer = m;
@@ -934,10 +936,12 @@ int osc_muxer_flush(OscMuxer *m) {
 int osc_muxer_close(OscMuxer *m) {
     if (!m) return 0;
 
-    osc_muxer_flush(m);
+    if (m->header_written) {
+        osc_muxer_flush(m);
 
-    if (m->fmt_ctx) {
-        av_write_trailer(m->fmt_ctx);
+        if (m->fmt_ctx) {
+            av_write_trailer(m->fmt_ctx);
+        }
     }
 
     if (m->sws_ctx) {
@@ -1002,6 +1006,7 @@ struct OscGifMuxer {
     int fps_num;
     int fps_den;
     AVPacket *pkt;
+    int header_written;
 };
 
 int osc_gif_muxer_open(const char *filename, int width, int height, int fps_num, int fps_den, OscGifMuxer **out_gif) {
@@ -1084,6 +1089,7 @@ int osc_gif_muxer_open(const char *filename, int width, int height, int fps_num,
         osc_gif_muxer_close(g);
         return -1;
     }
+    g->header_written = 1;
 
     g->pkt = av_packet_alloc();
     *out_gif = g;
@@ -1130,22 +1136,24 @@ int osc_gif_muxer_write_frame(OscGifMuxer *g, const uint8_t *rgba, int64_t pts_f
 int osc_gif_muxer_close(OscGifMuxer *g) {
     if (!g) return 0;
 
-    if (g->enc_ctx) {
-        avcodec_send_frame(g->enc_ctx, NULL);
-        while (1) {
-            int ret = avcodec_receive_packet(g->enc_ctx, g->pkt);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
-            if (ret < 0) break;
+    if (g->header_written) {
+        if (g->enc_ctx) {
+            avcodec_send_frame(g->enc_ctx, NULL);
+            while (1) {
+                int ret = avcodec_receive_packet(g->enc_ctx, g->pkt);
+                if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
+                if (ret < 0) break;
 
-            av_packet_rescale_ts(g->pkt, g->enc_ctx->time_base, g->stream->time_base);
-            g->pkt->stream_index = g->stream->index;
-            av_interleaved_write_frame(g->fmt_ctx, g->pkt);
-            av_packet_unref(g->pkt);
+                av_packet_rescale_ts(g->pkt, g->enc_ctx->time_base, g->stream->time_base);
+                g->pkt->stream_index = g->stream->index;
+                av_interleaved_write_frame(g->fmt_ctx, g->pkt);
+                av_packet_unref(g->pkt);
+            }
         }
-    }
 
-    if (g->fmt_ctx) {
-        av_write_trailer(g->fmt_ctx);
+        if (g->fmt_ctx) {
+            av_write_trailer(g->fmt_ctx);
+        }
     }
 
     if (g->sws_ctx) {

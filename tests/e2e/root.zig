@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const core = @import("core");
 const compositor = @import("compositor");
 const media = @import("media");
@@ -140,7 +141,10 @@ test "Gate 3: 10-second multi-track project render to MP4 and GIF" {
     };
 
     // 3. Render 10s MP4 (H.264 + AAC)
-    const mp4_path = "/tmp/gate3_render_10s.mp4";
+    const mp4_path = if (builtin.os.tag == .windows) "gate3_render_10s.mp4" else "/tmp/gate3_render_10s.mp4";
+    defer if (builtin.os.tag == .windows) {
+        std.fs.cwd().deleteFile(mp4_path) catch {};
+    };
     try media.encoder.MediaEncoder.encodeMp4(
         mp4_path,
         .{
@@ -161,7 +165,10 @@ test "Gate 3: 10-second multi-track project render to MP4 and GIF" {
     );
 
     // 4. Render 2s GIF (60 frames at 30 fps)
-    const gif_path = "/tmp/gate3_render.gif";
+    const gif_path = if (builtin.os.tag == .windows) "gate3_render.gif" else "/tmp/gate3_render.gif";
+    defer if (builtin.os.tag == .windows) {
+        std.fs.cwd().deleteFile(gif_path) catch {};
+    };
     try media.encoder.MediaEncoder.encodeGif(
         gif_path,
         width,
@@ -278,7 +285,6 @@ test "Gate 3: Real Whisper speech-to-text inference" {
 
 test "Gate 3: Real ONNX webcam segmentation matting" {
     const allocator = std.testing.allocator;
-    const builtin = @import("builtin");
     var onnx_lib: []const u8 = switch (builtin.os.tag) {
         .windows => "onnxruntime.dll",
         .macos => "tests/fixtures/onnx/libonnxruntime.dylib",
