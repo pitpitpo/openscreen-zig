@@ -31,7 +31,15 @@ fn getNanoTimestamp() i64 {
         _ = win.QueryPerformanceFrequency(&freq);
         _ = win.QueryPerformanceCounter(&counter);
         if (freq == 0) return 0;
-        return @divTrunc(counter * 1_000_000_000, freq);
+        const product = @as(i128, counter) * 1_000_000_000;
+        return @as(i64, @intCast(@divTrunc(product, freq)));
+    } else if (builtin.os.tag == .macos) {
+        const darwin = struct {
+            extern "c" fn clock_gettime_nsec_np(clock_id: c_int) u64;
+        };
+        // 6 = CLOCK_MONOTONIC on Darwin
+        const ns = darwin.clock_gettime_nsec_np(6);
+        return @as(i64, @intCast(ns & 0x7FFF_FFFF_FFFF_FFFF));
     } else {
         const posix_c = struct {
             const timespec = extern struct {
@@ -40,8 +48,8 @@ fn getNanoTimestamp() i64 {
             };
             extern "c" fn clock_gettime(clk_id: c_int, tp: *timespec) c_int;
         };
-        var ts: posix_c.timespec = undefined;
-        _ = posix_c.clock_gettime(1, &ts); // 1 = CLOCK_MONOTONIC
+        var ts: posix_c.timespec = .{ .tv_sec = 0, .tv_nsec = 0 };
+        _ = posix_c.clock_gettime(1, &ts); // 1 = CLOCK_MONOTONIC on Linux
         return @as(i64, @intCast(ts.tv_sec)) * 1_000_000_000 + @as(i64, @intCast(ts.tv_nsec));
     }
 }

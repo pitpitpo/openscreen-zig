@@ -235,30 +235,26 @@ static void *capture_thread_func(void *arg) {
             }
             h->last_button_state = cur_btn;
 
-            if (root_x != last_x || root_y != last_y || ev_type != OSC_MOUSE_EVENT_MOVE) {
-                float nx = (float)root_x / (float)w;
-                float ny = (float)root_y / (float)h_px;
-                if (nx < 0.0f) nx = 0.0f;
-                if (nx > 1.0f) nx = 1.0f;
-                if (ny < 0.0f) ny = 0.0f;
-                if (ny > 1.0f) ny = 1.0f;
+            float nx = (float)root_x / (float)w;
+            float ny = (float)root_y / (float)h_px;
+            if (nx < 0.0f) nx = 0.0f;
+            if (nx > 1.0f) nx = 1.0f;
+            if (ny < 0.0f) ny = 0.0f;
+            if (ny > 1.0f) ny = 1.0f;
 
-                OscCursorEvent ev;
-                ev.timestamp_ns = pts;
-                ev.x = nx;
-                ev.y = ny;
-                ev.raw_x = (int32_t)root_x;
-                ev.raw_y = (int32_t)root_y;
-                ev.shape = OSC_CURSOR_DEFAULT;
-                ev.event_type = ev_type;
-                ev.button = cur_btn;
-                ev.scroll_dx = 0.0f;
-                ev.scroll_dy = 0.0f;
+            OscCursorEvent ev;
+            ev.timestamp_ns = pts;
+            ev.x = nx;
+            ev.y = ny;
+            ev.raw_x = (int32_t)root_x;
+            ev.raw_y = (int32_t)root_y;
+            ev.shape = OSC_CURSOR_DEFAULT;
+            ev.event_type = ev_type;
+            ev.button = cur_btn;
+            ev.scroll_dx = 0.0f;
+            ev.scroll_dy = 0.0f;
 
-                h->config.on_cursor_event(&ev, h->config.user_data);
-                last_x = root_x;
-                last_y = root_y;
-            }
+            h->config.on_cursor_event(&ev, h->config.user_data);
         }
 
         /* 3. Audio Streams */
