@@ -97,6 +97,13 @@ pub fn build(b: *std.Build) void {
     linkWgpu(b, exe, wgpu_dep, target);
     b.installArtifact(exe);
 
+    if (target_os == .windows) {
+        if (wgpu_dep) |dep| {
+            const install_dll = b.addInstallFileWithDir(dep.path("lib/wgpu_native.dll"), .bin, "wgpu_native.dll");
+            b.getInstallStep().dependOn(&install_dll.step);
+        }
+    }
+
     // Run command: zig build run
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
