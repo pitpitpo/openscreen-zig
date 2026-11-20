@@ -344,6 +344,7 @@ pub const WGPUTextureViewDescriptor = extern struct {
     baseArrayLayer: u32 = 0,
     arrayLayerCount: u32 = 1,
     aspect: u32 = 1, // All
+    usage: u64 = 0,
 };
 
 pub const WGPUSamplerDescriptor = extern struct {
@@ -428,6 +429,7 @@ pub const WGPUPipelineLayoutDescriptor = extern struct {
     label: WGPUStringView = .{},
     bindGroupLayoutCount: usize = 0,
     bindGroupLayouts: [*]const WGPUBindGroupLayout,
+    immediateSize: u32 = 0,
 };
 
 pub const WGPUTexelCopyBufferLayout = extern struct {
@@ -470,6 +472,8 @@ pub const WGPUAdapterInfo = extern struct {
     adapterType: u32 = 0,
     vendorID: u32 = 0,
     deviceID: u32 = 0,
+    subgroupMinSize: u32 = 0,
+    subgroupMaxSize: u32 = 0,
 };
 
 pub const WGPURequestDeviceCallbackInfo = extern struct {
@@ -555,17 +559,45 @@ pub extern fn wgpuQueueWriteBuffer(queue: WGPUQueue, buffer: WGPUBuffer, bufferO
 pub extern fn wgpuQueueWriteTexture(queue: WGPUQueue, destination: *const WGPUImageCopyTexture, data: *const anyopaque, dataSize: usize, dataLayout: *const WGPUTextureDataLayout, writeSize: *const WGPUExtent3D) void;
 pub extern fn wgpuQueueSubmit(queue: WGPUQueue, commandCount: usize, commands: [*]const WGPUCommandBuffer) void;
 
-test "wgpu C ABI struct sizes" {
+test "wgpu C ABI struct sizes exhaustive" {
+    try std.testing.expectEqual(@as(usize, 16), @sizeOf(WGPUStringView));
+    try std.testing.expectEqual(@as(usize, 16), @sizeOf(WGPUChainedStruct));
+    try std.testing.expectEqual(@as(usize, 8), @sizeOf(WGPUFuture));
+    try std.testing.expectEqual(@as(usize, 16), @sizeOf(WGPUFutureWaitInfo));
+    try std.testing.expectEqual(@as(usize, 32), @sizeOf(WGPUColor));
+    try std.testing.expectEqual(@as(usize, 12), @sizeOf(WGPUExtent3D));
+    try std.testing.expectEqual(@as(usize, 12), @sizeOf(WGPUOrigin3D));
+    try std.testing.expectEqual(@as(usize, 32), @sizeOf(WGPUShaderSourceWGSL));
+    try std.testing.expectEqual(@as(usize, 24), @sizeOf(WGPUShaderModuleDescriptor));
+    try std.testing.expectEqual(@as(usize, 72), @sizeOf(WGPURenderPassColorAttachment));
+    try std.testing.expectEqual(@as(usize, 64), @sizeOf(WGPURenderPassDescriptor));
+    try std.testing.expectEqual(@as(usize, 12), @sizeOf(WGPUBlendComponent));
+    try std.testing.expectEqual(@as(usize, 24), @sizeOf(WGPUBlendState));
+    try std.testing.expectEqual(@as(usize, 32), @sizeOf(WGPUColorTargetState));
+    try std.testing.expectEqual(@as(usize, 64), @sizeOf(WGPUFragmentState));
+    try std.testing.expectEqual(@as(usize, 64), @sizeOf(WGPUVertexState));
+    try std.testing.expectEqual(@as(usize, 32), @sizeOf(WGPUPrimitiveState));
+    try std.testing.expectEqual(@as(usize, 24), @sizeOf(WGPUMultisampleState));
+    try std.testing.expectEqual(@as(usize, 168), @sizeOf(WGPURenderPipelineDescriptor));
     try std.testing.expectEqual(@as(usize, 48), @sizeOf(WGPUBufferDescriptor));
     try std.testing.expectEqual(@as(usize, 80), @sizeOf(WGPUTextureDescriptor));
+    try std.testing.expectEqual(@as(usize, 64), @sizeOf(WGPUTextureViewDescriptor));
+    try std.testing.expectEqual(@as(usize, 64), @sizeOf(WGPUSamplerDescriptor));
+    try std.testing.expectEqual(@as(usize, 24), @sizeOf(WGPUBufferBindingLayout));
+    try std.testing.expectEqual(@as(usize, 16), @sizeOf(WGPUSamplerBindingLayout));
+    try std.testing.expectEqual(@as(usize, 24), @sizeOf(WGPUTextureBindingLayout));
+    try std.testing.expectEqual(@as(usize, 24), @sizeOf(WGPUStorageTextureBindingLayout));
     try std.testing.expectEqual(@as(usize, 120), @sizeOf(WGPUBindGroupLayoutEntry));
+    try std.testing.expectEqual(@as(usize, 40), @sizeOf(WGPUBindGroupLayoutDescriptor));
     try std.testing.expectEqual(@as(usize, 56), @sizeOf(WGPUBindGroupEntry));
+    try std.testing.expectEqual(@as(usize, 48), @sizeOf(WGPUBindGroupDescriptor));
+    try std.testing.expectEqual(@as(usize, 48), @sizeOf(WGPUPipelineLayoutDescriptor));
     try std.testing.expectEqual(@as(usize, 16), @sizeOf(WGPUTexelCopyBufferLayout));
     try std.testing.expectEqual(@as(usize, 32), @sizeOf(WGPUTexelCopyTextureInfo));
     try std.testing.expectEqual(@as(usize, 24), @sizeOf(WGPUTexelCopyBufferInfo));
-    try std.testing.expectEqual(@as(usize, 32), @sizeOf(WGPUColorTargetState));
-    try std.testing.expectEqual(@as(usize, 168), @sizeOf(WGPURenderPipelineDescriptor));
-    try std.testing.expectEqual(@as(usize, 32), @sizeOf(WGPUPrimitiveState));
-    try std.testing.expectEqual(@as(usize, 64), @sizeOf(WGPUVertexState));
-    try std.testing.expectEqual(@as(usize, 64), @sizeOf(WGPUFragmentState));
+    try std.testing.expectEqual(@as(usize, 32), @sizeOf(WGPURequestAdapterOptions));
+    try std.testing.expectEqual(@as(usize, 96), @sizeOf(WGPUAdapterInfo));
+    try std.testing.expectEqual(@as(usize, 40), @sizeOf(WGPURequestDeviceCallbackInfo));
+    try std.testing.expectEqual(@as(usize, 40), @sizeOf(WGPURequestAdapterCallbackInfo));
+    try std.testing.expectEqual(@as(usize, 40), @sizeOf(WGPUBufferMapCallbackInfo));
 }
