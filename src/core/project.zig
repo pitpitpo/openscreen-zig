@@ -322,6 +322,17 @@ pub fn create_empty_document(allocator: std.mem.Allocator, title: []const u8) !A
     };
 }
 
+pub fn load_from_json(allocator: std.mem.Allocator, json_bytes: []const u8) !std.json.Parsed(AxcutDocument) {
+    return try std.json.parseFromSlice(AxcutDocument, allocator, json_bytes, .{
+        .ignore_unknown_fields = true,
+        .allocate = .alloc_always,
+    });
+}
+
+pub fn save_to_json(allocator: std.mem.Allocator, doc: *const AxcutDocument) ![]u8 {
+    return try std.fmt.allocPrint(allocator, "{f}", .{std.json.fmt(doc, .{})});
+}
+
 test "document schema version and defaults" {
     var doc = try create_empty_document(std.testing.allocator, "Test Project");
     defer doc.deinit(std.testing.allocator);
@@ -330,4 +341,55 @@ test "document schema version and defaults" {
     try std.testing.expectEqualStrings("Test Project", doc.project.title);
     try std.testing.expectEqual(@as(f32, 0.6), doc.legacyEditor.shadowIntensity);
     try std.testing.expectEqualStrings("auto", doc.legacyEditor.aspectRatio);
+}
+
+test "document round-trip real upstream fixture JSON without field loss" {
+    const allocator = std.testing.allocator;
+    const fixture_bytes = @embedFile("fixtures/real_sample.openscreen");
+
+    const parsed = try load_from_json(allocator, fixture_bytes);
+    defer parsed.deinit();
+
+    const doc = parsed.value;
+    try std.testing.expectEqual(@as(u32, 9), doc.schemaVersion);
+    try std.testing.expectEqualStrings("proj_0b319172-309f-4cd0-af3c-a3c53f1f4994", doc.project.id);
+    try std.testing.expectEqualStrings("Real Screencast Recording", doc.project.title);
+    try std.testing.expectEqual(@as(usize, 1), doc.assets.len);
+    try std.testing.expectEqualStrings("/recordings/recording-1783845220910.mp4", doc.assets[0].originalPath);
+    try std.testing.expectEqual(@as(f64, 66.154), doc.assets[0].durationSec);
+    try std.testing.expectEqualStrings("/recordings/camera-1783845220910.mp4", doc.assets[0].cameraTrack.?);
+    try std.testing.expectEqual(@as(usize, 1), doc.transcripts.len);
+    try std.testing.expectEqualStrings("fr", doc.transcripts[0].language);
+    try std.testing.expectEqual(@as(usize, 2), doc.transcripts[0].words.len);
+    try std.testing.expectEqualStrings("Bonjour", doc.transcripts[0].words[0].word);
+    try std.testing.expectEqual(@as(usize, 1), doc.timeline.clips.len);
+    try std.testing.expectEqual(@as(usize, 1), doc.timeline.trimRanges.len);
+    try std.testing.expectEqual(@as(usize, 1), doc.timeline.speedRanges.len);
+    try std.testing.expectEqual(@as(usize, 1), doc.zoomRanges.len);
+    try std.testing.expectEqualStrings("left", doc.zoomRanges[0].rotation);
+    try std.testing.expectEqual(@as(usize, 1), doc.annotations.len);
+    try std.testing.expectEqualStrings("Demo OpenScreen", doc.annotations[0].content);
+    try std.testing.expectEqual(@as(usize, 1), doc.layoutRegions.len);
+    try std.testing.expectEqualStrings("picture-in-picture", doc.layoutRegions[0].preset);
+    try std.testing.expectEqualStrings("prism-glow", doc.legacyEditor.cursorTheme);
+
+    // Save to JSON
+    const serialized = try save_to_json(allocator, &doc);
+    defer allocator.free(serialized);
+
+    // Re-parse saved JSON
+    const reparsed = try load_from_json(allocator, serialized);
+    defer reparsed.deinit();
+
+    const redoc = reparsed.value;
+    try std.testing.expectEqual(doc.schemaVersion, redoc.schemaVersion);
+    try std.testing.expectEqualStrings(doc.project.id, redoc.project.id);
+    try std.testing.expectEqualStrings(doc.project.title, redoc.project.title);
+    try std.testing.expectEqual(doc.assets.len, redoc.assets.len);
+    try std.testing.expectEqualStrings(doc.assets[0].originalPath, redoc.assets[0].originalPath);
+    try std.testing.expectEqual(doc.timeline.clips.len, redoc.timeline.clips.len);
+    try std.testing.expectEqual(doc.timeline.trimRanges.len, redoc.timeline.trimRanges.len);
+    try std.testing.expectEqual(doc.zoomRanges.len, redoc.zoomRanges.len);
+    try std.testing.expectEqualStrings(doc.zoomRanges[0].rotation, redoc.zoomRanges[0].rotation);
+    try std.testing.expectEqualStrings(doc.legacyEditor.cursorTheme, redoc.legacyEditor.cursorTheme);
 }

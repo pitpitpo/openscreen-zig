@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 9,
+  "project": {
+    "id": "proj_0b319172-309f-4cd0-af3c-a3c53f1f4994",
+    "title": "Real Screencast Recording",
+    "createdAt": "2026-07-31T14:20:00.000Z",
+    "updatedAt": "2026-07-31T14:35:00.000Z",
+    "primaryAssetId": "asset_309a9af8-6d82-4705-b62e-c238987e2576"
+  },
+  "assets": [
+    {
+      "id": "asset_309a9af8-6d82-4705-b62e-c238987e2576",
+      "kind": "video",
+      "originalPath": "/recordings/recording-1783845220910.mp4",
+      "durationSec": 66.154,
+      "width": 1920,
+      "height": 1080,
+      "fps": 60.0,
+      "cameraTrack": "/recordings/camera-1783845220910.mp4"
+    }
+  ],
+  "transcripts": [
+    {
+      "assetId": "asset_309a9af8-6d82-4705-b62e-c238987e2576",
+      "language": "fr",
+      "words": [
+        {
+          "word": "Bonjour",
+          "startSec": 0.5,
+          "endSec": 1.1,
+          "confidence": 0.98
+        },
+        {
+          "word": "monde",
+          "startSec": 1.2,
+          "endSec": 1.8,
+          "confidence": 0.95
+        }
+      ],
+      "silences": [
+        {
+          "startSec": 1.8,
+          "endSec": 2.4,
+          "durationSec": 0.6
+        }
+      ]
+    }
+  ],
+  "timeline": {
+    "clips": [
+      {
+        "id": "clip_main_0",
+        "assetId": "asset_309a9af8-6d82-4705-b62e-c238987e2576",
+        "sourceStartSec": 0.0,
+        "sourceEndSec": 66.154,
+        "timelineStartSec": 0.0
+      }
+    ],
+    "trimRanges": [
+      {
+        "id": "trim_start",
+        "clipId": "clip_main_0",
+        "startSec": 0.0,
+        "endSec": 0.4
+      }
+    ],
+    "speedRanges": [
+      {
+        "id": "speed_fast",
+        "clipId": "clip_main_0",
+        "startSec": 10.0,
+        "endSec": 15.0,
+        "speed": 2.0
+      }
+    ]
+  },
+  "zoomRanges": [
+    {
+      "id": "zoom_intro",
+      "clipId": "clip_main_0",
+      "startSec": 2.5,
+      "endSec": 6.0,
+      "depth": 3,
+      "customScale": 1.8,
+      "focus": {
+        "cx": 0.45,
+        "cy": 0.52
+      },
+      "focusMode": "manual",
+      "rotation": "left"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "ann_title",
+      "clipId": "clip_main_0",
+      "startSec": 1.0,
+      "endSec": 4.0,
+      "type": "text",
+      "content": "Demo OpenScreen",
+      "position_x": 12.5,
+      "position_y": 80.0,
+      "size_width": 40.0,
+      "size_height": 12.0,
+      "style": {
+        "fontSize": 28.0,
+        "color": "#ffffff",
+        "backgroundColor": "rgba(0,0,0,0.7)",
+        "borderRadius": 10.0,
+        "padding": 16.0,
+        "animation": "fade"
+      }
+    }
+  ],
+  "layoutRegions": [
+    {
+      "id": "layout_pip_0",
+      "clipId": "clip_main_0",
+      "startSec": 0.0,
+      "endSec": 66.154,
+      "preset": "picture-in-picture"
+    }
+  ],
+  "legacyEditor": {
+    "wallpaper": "/wallpapers/wallpaper11.jpg",
+    "wallpaperMotion": "subtle",
+    "frame": "window",
+    "frameTheme": "dark",
+    "aspectRatio": "16:9",
+    "shadowIntensity": 0.65,
+    "backgroundBlur": 0.1,
+    "motionBlurAmount": 0.35,
+    "depthOfField": true,
+    "borderRadius": 42.0,
+    "padding": 48.0,
+    "webcamLayoutPreset": "picture-in-picture",
+    "webcamMaskShape": "circle",
+    "webcamRoundness": 1.0,
+    "webcamMirrored": false,
+    "webcamReactiveZoom": true,
+    "webcamSizePreset": 32.0,
+    "webcamShadowIntensity": 0.5,
+    "webcamAnchor": "bottom-right",
+    "webcamBackgroundMode": "none",
+    "webcamWallpaper": "/wallpapers/wallpaper11.jpg",
+    "webcamBlurIntensity": 0.5,
+    "cursor": {
+      "size": 3.6,
+      "smoothing": 0.3,
+      "motionBlur": 0.35,
+      "clickBounce": 1.0,
+      "model3d": false,
+      "clickImpact": false,
+      "clickSound": false,
+      "clickSoundGainDb": 0.0,
+      "autoHide": false
+    },
+    "cursorShow": true,
+    "cursorTheme": "prism-glow"
+  }
+}

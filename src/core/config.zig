@@ -88,3 +88,93 @@ test "platform-pinned user data and lock paths" {
     defer std.testing.allocator.free(linux_dev);
     try std.testing.expectEqualStrings("/home/dev/.config/openscreen-dev/singleton.lock", linux_dev);
 }
+
+pub const DipRect = struct {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+};
+
+pub const PhysicalRect = struct {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+};
+
+/// Converts bounds from virtual DIP coordinate space to native helper physical pixels.
+/// Windows: per-monitor-v2 DPI unvirtualized physical pixels relative to monitor origin.
+/// macOS & Linux: Points / logical pixels (identity scale factor in ScreenCaptureKit and PipeWire).
+pub fn dip_to_physical_rect(
+    platform: PlatformTag,
+    bounds: DipRect,
+    scale_factor: f32,
+    monitor_origin_x: f32,
+    monitor_origin_y: f32,
+) PhysicalRect {
+    if (platform == .macos or platform == .linux) {
+        return .{
+            .x = @intFromFloat(bounds.x),
+            .y = @intFromFloat(bounds.y),
+            .width = @as(u32, @intFromFloat(@max(1.0, bounds.width))),
+            .height = @as(u32, @intFromFloat(@max(1.0, bounds.height))),
+        };
+    }
+
+    // Windows per-monitor-v2 scaling: (DIP - Origin) * Scale + Origin
+    const rel_x = bounds.x - monitor_origin_x;
+    const rel_y = bounds.y - monitor_origin_y;
+    const phys_x = @as(i32, @intFromFloat(monitor_origin_x + rel_x * scale_factor));
+    const phys_y = @as(i32, @intFromFloat(monitor_origin_y + rel_y * scale_factor));
+    const phys_w = @as(u32, @intFromFloat(@max(1.0, bounds.width * scale_factor)));
+    const phys_h = @as(u32, @intFromFloat(@max(1.0, bounds.height * scale_factor)));
+
+    return .{
+        .x = phys_x,
+        .y = phys_y,
+        .width = phys_w,
+        .height = phys_h,
+    };
+}
+
+test "platform-pinned DPI coordinate conversion" {
+    const dip = DipRect{ .x = 100.0, .y = 50.0, .width = 1920.0, .height = 1080.0 };
+
+    // macOS: 1:1 points
+    const mac_rect = dip_to_physical_rect(.macos, dip, 2.0, 0.0, 0.0);
+    try std.testing.expectEqual(@as(i32, 100), mac_rect.x);
+    try std.testing.expectEqual(@as(i32, 50), mac_rect.y);
+    try std.testing.expectEqual(@as(u32, 1920), mac_rect.width);
+    try std.testing.expectEqual(@as(u32, 1080), mac_rect.height);
+
+    // Linux: 1:1 logical pixels
+    const linux_rect = dip_to_physical_rect(.linux, dip, 1.5, 0.0, 0.0);
+    try std.testing.expectEqual(@as(i32, 100), linux_rect.x);
+    try std.testing.expectEqual(@as(i32, 50), linux_rect.y);
+    try std.testing.expectEqual(@as(u32, 1920), linux_rect.width);
+    try std.testing.expectEqual(@as(u32, 1080), linux_rect.height);
+
+    // Windows 100% scale
+    const win_100 = dip_to_physical_rect(.windows, dip, 1.0, 0.0, 0.0);
+    try std.testing.expectEqual(@as(i32, 100), win_100.x);
+    try std.testing.expectEqual(@as(i32, 50), win_100.y);
+    try std.testing.expectEqual(@as(u32, 1920), win_100.width);
+    try std.testing.expectEqual(@as(u32, 1080), win_100.height);
+
+    // Windows 150% scale on primary display (origin 0,0)
+    const win_150 = dip_to_physical_rect(.windows, dip, 1.5, 0.0, 0.0);
+    try std.testing.expectEqual(@as(i32, 150), win_150.x);
+    try std.testing.expectEqual(@as(i32, 75), win_150.y);
+    try std.testing.expectEqual(@as(u32, 2880), win_150.width);
+    try std.testing.expectEqual(@as(u32, 1620), win_150.height);
+
+    // Windows 200% scale on secondary display with non-zero origin (1920, 0)
+    const sec_dip = DipRect{ .x = 2020.0, .y = 100.0, .width = 800.0, .height = 600.0 };
+    const win_200_sec = dip_to_physical_rect(.windows, sec_dip, 2.0, 1920.0, 0.0);
+    // rel_x = 2020 - 1920 = 100 -> phys_x = 1920 + 100 * 2.0 = 2120
+    try std.testing.expectEqual(@as(i32, 2120), win_200_sec.x);
+    try std.testing.expectEqual(@as(i32, 200), win_200_sec.y);
+    try std.testing.expectEqual(@as(u32, 1600), win_200_sec.width);
+    try std.testing.expectEqual(@as(u32, 1200), win_200_sec.height);
+}
