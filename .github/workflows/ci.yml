@@ -1,0 +1,106 @@
+name: Tier 1 CI
+
+on:
+  push:
+    branches: [main, feat/*, "release/**"]
+  pull_request:
+    branches: [main, "release/**"]
+
+env:
+  OPENSCREEN_TEST_HEADLESS: "1"
+
+jobs:
+  ubuntu-full-verification:
+    name: Ubuntu 24.04 (Full Verification Engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            mesa-vulkan-drivers \
+            libvulkan-dev \
+            xvfb \
+            pulseaudio \
+            libasound2-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libavutil-dev \
+            libswscale-dev \
+            libswresample-dev \
+            libfreetype-dev \
+            libharfbuzz-dev \
+            libx11-dev \
+            libxfixes-dev \
+            libpipewire-0.3-dev
+
+      - name: Setup Zig 0.17.1
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.17.1
+
+      - name: Verify Zig formatting
+        run: zig fmt --check build.zig build.zig.zon src/
+
+      - name: Build openscreen binary (ReleaseSafe)
+        run: zig build -Doptimize=ReleaseSafe
+
+      - name: Validate 17 Locales (i18n completeness)
+        run: zig build i18n-check
+
+      - name: Run unit tests (0 memory leaks)
+        run: zig build test
+
+      - name: Run golden pixel & SSIM tests (GPU + CPU fallback)
+        run: xvfb-run -a zig build test-golden
+
+      - name: Run E2E integration tests
+        run: xvfb-run -a zig build test-e2e
+
+  windows-parity:
+    name: Windows (WinRT / WGC Parity)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig 0.17.1
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.17.1
+
+      - name: Build openscreen binary
+        run: zig build -Doptimize=ReleaseSafe
+
+      - name: Run unit tests
+        run: zig build test
+
+      - name: Run golden pixel tests (D3D12 WARP + CPU fallback)
+        run: zig build test-golden
+
+      - name: Run E2E integration tests
+        run: zig build test-e2e
+
+  macos-parity:
+    name: macOS (ScreenCaptureKit Parity)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig 0.17.1
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.17.1
+
+      - name: Build openscreen binary
+        run: zig build -Doptimize=ReleaseSafe
+
+      - name: Run unit tests
+        run: zig build test
+
+      - name: Run golden pixel tests (CPU fallback)
+        run: zig build test-golden
+
+      - name: Run E2E integration tests
+        run: zig build test-e2e

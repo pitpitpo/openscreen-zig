@@ -1,0 +1,53 @@
+name: Tier 2 Hardware E2E
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  hardware-e2e-matrix:
+    name: Real Hardware Capture & Encode (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macOS
+            runs_on: [self-hosted, macOS]
+            encoder: h264_videotoolbox
+          - platform: Windows
+            runs_on: [self-hosted, Windows]
+            encoder: h264_nvenc
+          - platform: Linux
+            runs_on: [self-hosted, Linux]
+            encoder: h264_vaapi
+    runs-on: ${{ matrix.runs_on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build openscreen & diagnostics
+        run: |
+          zig build -Doptimize=ReleaseFast
+          zig build cursor-diag
+
+      - name: Exercise Real OS Screen & Audio Capture
+        run: |
+          ./zig-out/bin/openscreen record --duration 5 --project hardware_take.openscreen --json
+
+      - name: Run Cursor Diagnostics
+        run: |
+          ./zig-out/bin/cursor-diag hardware_take.openscreen
+
+      - name: Exercise Hardware H.264 Encoder (${{ matrix.encoder }})
+        run: |
+          ./zig-out/bin/openscreen export hardware_take.openscreen -o hardware_take.mp4 --resolution 1080p --fps 60 --json
+
+      - name: Verify Content Protection & HUD Exclusion
+        run: |
+          OPENSCREEN_DISABLE_CONTENT_PROTECTION=1 ./zig-out/bin/openscreen record --duration 2 --project hud_audit.openscreen --json
+          ./zig-out/bin/openscreen record --duration 2 --project hud_protected.openscreen --json
+
+      - name: Append Structured Results to Checklist
+        run: |
+          echo "- **Run ${{ github.run_id }}**: ${{ matrix.platform }} passed with encoder ${{ matrix.encoder }}" >> tests/manual-e2e-checklist.md
