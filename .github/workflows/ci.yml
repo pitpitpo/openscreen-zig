@@ -69,6 +69,9 @@ jobs:
       - name: Run unit tests (0 memory leaks)
         run: zig build test
 
+      - name: Run Gate 6 offscreen desktop GUI tests
+        run: xvfb-run -a zig build test-ui
+
       - name: Run golden pixel & SSIM tests (GPU + CPU fallback)
         run: xvfb-run -a zig build test-golden
 
@@ -150,6 +153,9 @@ jobs:
       - name: Run unit tests
         run: zig build test
 
+      - name: Run Gate 6 offscreen desktop GUI tests
+        run: zig build test-ui
+
       - name: Run golden pixel tests (D3D12 WARP + CPU fallback)
         run: zig build test-golden
 
@@ -184,6 +190,9 @@ jobs:
 
       - name: Run unit tests
         run: zig build test
+
+      - name: Run Gate 6 offscreen desktop GUI tests
+        run: zig build test-ui
 
       - name: Run golden pixel tests (CPU fallback)
         run: zig build test-golden

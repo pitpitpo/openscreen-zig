@@ -58,6 +58,7 @@ fn linkOpenScreenLibs(
     mod.addIncludePath(b.path("src/ffi/whisper"));
     mod.addIncludePath(b.path("src/ffi/onnx"));
     mod.addIncludePath(b.path("src/capture/shims"));
+    mod.addIncludePath(b.path("src/ui/shims"));
 
     const target_os = target.result.os.tag;
     if (target_os == .linux) {
@@ -73,6 +74,11 @@ fn linkOpenScreenLibs(
         mod.addCSourceFiles(.{
             .root = b.path("src/capture/shims"),
             .files = &.{"linux_pw.c"},
+            .flags = &.{ "-D_GNU_SOURCE", "-O3" },
+        });
+        mod.addCSourceFiles(.{
+            .root = b.path("src/ui/shims"),
+            .files = &.{"shell_shim_linux.c"},
             .flags = &.{ "-D_GNU_SOURCE", "-O3" },
         });
     } else if (target_os == .macos) {
@@ -94,6 +100,11 @@ fn linkOpenScreenLibs(
             .files = &.{"macos_sck.m"},
             .flags = &.{ "-fobjc-arc", "-O3", "-Wno-deprecated-declarations" },
         });
+        mod.addCSourceFiles(.{
+            .root = b.path("src/ui/shims"),
+            .files = &.{"shell_shim_macos.m"},
+            .flags = &.{ "-fobjc-arc", "-O3", "-Wno-deprecated-declarations" },
+        });
     } else if (target_os == .windows) {
         mod.addLibraryPath(b.path("lib"));
         mod.addIncludePath(b.path("include"));
@@ -101,9 +112,17 @@ fn linkOpenScreenLibs(
         mod.linkSystemLibrary("dxgi", .{});
         mod.linkSystemLibrary("ole32", .{});
         mod.linkSystemLibrary("oleaut32", .{});
+        mod.linkSystemLibrary("user32", .{});
+        mod.linkSystemLibrary("shell32", .{});
+        mod.linkSystemLibrary("gdi32", .{});
         mod.addCSourceFiles(.{
             .root = b.path("src/capture/shims"),
             .files = &.{"win_wgc.cpp"},
+            .flags = &.{ "-std=c++17", "-O3" },
+        });
+        mod.addCSourceFiles(.{
+            .root = b.path("src/ui/shims"),
+            .files = &.{"shell_shim_win.cpp"},
             .flags = &.{ "-std=c++17", "-O3" },
         });
     }
@@ -235,6 +254,17 @@ pub fn build(b: *std.Build) void {
     openscreen_cli_mod.addImport("cursor_diag", cursor_diag_mod);
     openscreen_cli_mod.addImport("ai", openscreen_ai_mod);
 
+    // UI module
+    const openscreen_ui_mod = b.createModule(.{
+        .root_source_file = b.path("src/ui/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    openscreen_ui_mod.addImport("core", openscreen_core_mod);
+    openscreen_ui_mod.addImport("compositor", openscreen_compositor_mod);
+    openscreen_ui_mod.addImport("media", openscreen_media_mod);
+    openscreen_ui_mod.addImport("ffi", openscreen_ffi_mod);
+
     // Main executable module
     const core_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -249,6 +279,7 @@ pub fn build(b: *std.Build) void {
     core_mod.addImport("cursor_diag", cursor_diag_mod);
     core_mod.addImport("ai", openscreen_ai_mod);
     core_mod.addImport("cli", openscreen_cli_mod);
+    core_mod.addImport("ui", openscreen_ui_mod);
 
     // Main executable: openscreen
     const exe = b.addExecutable(.{
@@ -285,6 +316,7 @@ pub fn build(b: *std.Build) void {
     unit_mod.addImport("cursor_diag", cursor_diag_mod);
     unit_mod.addImport("ai", openscreen_ai_mod);
     unit_mod.addImport("cli", openscreen_cli_mod);
+    unit_mod.addImport("ui", openscreen_ui_mod);
     const unit_tests = b.addTest(.{
         .root_module = unit_mod,
     });
@@ -329,6 +361,7 @@ pub fn build(b: *std.Build) void {
     e2e_mod.addImport("cursor_diag", cursor_diag_mod);
     e2e_mod.addImport("ai", openscreen_ai_mod);
     e2e_mod.addImport("cli", openscreen_cli_mod);
+    e2e_mod.addImport("ui", openscreen_ui_mod);
     const e2e_tests = b.addTest(.{
         .root_module = e2e_mod,
     });
@@ -376,4 +409,23 @@ pub fn build(b: *std.Build) void {
     const run_i18n = b.addRunArtifact(i18n_test);
     const i18n_step = b.step("i18n-check", "Validate all 17 locale files");
     i18n_step.dependOn(&run_i18n.step);
+
+    // Gate 6 UI test suite: zig build test-ui
+    const ui_test_mod = b.createModule(.{
+        .root_source_file = b.path("tests/ui/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ui_test_mod.addImport("core", openscreen_core_mod);
+    ui_test_mod.addImport("compositor", openscreen_compositor_mod);
+    ui_test_mod.addImport("ffi", openscreen_ffi_mod);
+    ui_test_mod.addImport("media", openscreen_media_mod);
+    ui_test_mod.addImport("ui", openscreen_ui_mod);
+    const ui_tests = b.addTest(.{
+        .root_module = ui_test_mod,
+    });
+    linkOpenScreenLibs(b, ui_tests, wgpu_dep, target);
+    const run_ui_tests = b.addRunArtifact(ui_tests);
+    const ui_step = b.step("test-ui", "Run Gate 6 offscreen desktop GUI test suite");
+    ui_step.dependOn(&run_ui_tests.step);
 }
