@@ -188,7 +188,7 @@ void* osc_window_create(const char* title, int width, int height, int resizable)
     wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
     wc.lpfnWndProc = OscWindowProc;
     wc.hInstance = GetModuleHandleW(NULL);
-    wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
+    wc.hCursor = LoadCursorW(NULL, MAKEINTRESOURCEW(32512));
     wc.lpszClassName = L"OpenScreenMainWindowClass";
     RegisterClassExW(&wc);
 
