@@ -91,7 +91,7 @@ fn linkOpenScreenLibs(
         mod.addCSourceFiles(.{
             .root = b.path("src/capture/shims"),
             .files = &.{"macos_sck.m"},
-            .flags = &.{ "-fobjc-arc", "-O3" },
+            .flags = &.{ "-fobjc-arc", "-O3", "-Wno-deprecated-declarations" },
         });
     } else if (target_os == .windows) {
         mod.addLibraryPath(b.path("lib"));

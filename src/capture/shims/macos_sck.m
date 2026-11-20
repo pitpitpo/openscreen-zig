@@ -56,7 +56,7 @@ int osc_capture_enumerate_sources(int type, OscCaptureSourceInfo *out_sources, i
                 count++;
             }
         } else if (type == OSC_SOURCE_WINDOW) {
-            CFArrayRef windowList = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kNullWindowID);
+            CFArrayRef windowList = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
             if (windowList) {
                 CFIndex n = CFArrayGetCount(windowList);
                 for (CFIndex i = 0; i < n && count < max_sources; i++) {
@@ -88,7 +88,11 @@ int osc_capture_enumerate_sources(int type, OscCaptureSourceInfo *out_sources, i
             out_sources[count].is_primary = 1;
             count++;
         } else if (type == OSC_SOURCE_WEBCAM) {
-            NSArray<AVCaptureDevice *> *devices = [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo];
+            AVCaptureDeviceDiscoverySession *session = [AVCaptureDeviceDiscoverySession
+                discoverySessionWithDeviceTypes:@[AVCaptureDeviceTypeBuiltInWideAngleCamera]
+                mediaType:AVMediaTypeVideo
+                position:AVCaptureDevicePositionUnspecified];
+            NSArray<AVCaptureDevice *> *devices = session.devices;
             for (AVCaptureDevice *d in devices) {
                 if (count >= max_sources) break;
                 snprintf(out_sources[count].id, sizeof(out_sources[count].id), "%s", [[d uniqueID] UTF8String]);
