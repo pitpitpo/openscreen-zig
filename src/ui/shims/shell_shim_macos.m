@@ -1,8 +1,10 @@
 #import <Cocoa/Cocoa.h>
 #include "shell_shim.h"
 #include <sys/file.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <string.h>
 
 static int g_mac_lock_fd = -1;
 static char g_mac_lock_path[1024] = {0};
